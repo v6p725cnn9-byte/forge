@@ -28,7 +28,8 @@ glm::mat4 Camera::projection(float aspect) const
 void Camera::look(float dx, float dy)
 {
     yaw = std::remainder(yaw + dx * sensitivity, 360.0f);
-    pitch = std::clamp(pitch - dy * sensitivity, -89.0f, 89.0f);
+    const float sign = invert_y ? 1.0f : -1.0f;
+    pitch = std::clamp(pitch + dy * sensitivity * sign, -89.0f, 89.0f);
 }
 
 void Camera::look_at(const glm::vec3& target)

@@ -1,0 +1,63 @@
+#pragma once
+
+#include "engine/app/lab.hpp"
+#include "engine/game/session.hpp"
+#include "engine/net/client.hpp"
+#include "engine/net/server.hpp"
+#include "engine/render/pbr_scene.hpp"
+#include "engine/script/registry.hpp"
+
+#include <string>
+
+namespace forge::labs {
+
+struct SessionLaunch {
+    bool hosting = true;
+    bool lan = false;
+    std::string connect;
+    int port = 27015;
+};
+
+class SurvivalLab final : public app::Lab {
+public:
+    const char* name() const override { return "survival"; }
+    void configure(const SessionLaunch& launch)
+    {
+        launch_ = launch;
+        configured_ = true;
+    }
+    std::vector<const char*> shaders() const override
+    {
+        return {"pbr.vert", "pbr.frag", "tonemap.vert", "tonemap.frag", "bloom.frag"};
+    }
+    rhi::HostConfig host_config() const override { return {.hdr = true, .bloom = false}; }
+    bool setup(rhi::Host& host, Camera& camera) override;
+    void update(float dt, Camera& camera, const app::LabInput& input) override;
+    rhi::FrameResult draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
+                          Uint32 height, Camera& camera, bool captured) override;
+    void teardown(rhi::Host& host) override;
+    std::uint32_t triangles() const override { return cube_.triangle_count * 40; }
+
+private:
+    void sync_debug();
+    void follow_camera(Camera& camera) const;
+    const net::Ghost* self() const;
+
+    script::Registry world_;
+    game::Sim sim_;
+    net::Server server_;
+    net::Client client_;
+    render::PbrScene cube_;
+    SDL_GPUGraphicsPipeline* pbr_ = nullptr;
+    bool hosting_ = true;
+    bool configured_ = false;
+    float yaw_ = 0;
+    std::string join_line_;
+    SessionLaunch launch_{};
+};
+
+} // namespace forge::labs
+
+namespace forge::app {
+int run_game(const char* window_title);
+}

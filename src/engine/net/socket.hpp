@@ -13,7 +13,9 @@ struct Address {
 };
 
 Address localhost(std::uint16_t port);
+Address any(std::uint16_t port);
 bool parse_address(const std::string& text, Address& out);
+std::vector<std::string> ipv4_addresses();
 
 class Udp {
 public:

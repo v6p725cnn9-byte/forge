@@ -11,9 +11,11 @@
     "shaders/shadow.vert.hlsl": "b523a9188e7ed0e6451f14fed5173a094f484b5ee34292f9236562ef38fdf286",
     "shaders/tonemap.frag.hlsl": "ce73733b0b5c7f570cd53142dacf1bf229a4f791a6634db779d63260b8fd98fd",
     "shaders/tonemap.vert.hlsl": "bdec84dbf66811d74fcd29345b25f47fbcaeee3545afdb41b5efc4f410b3452b",
+    "shaders/ui.frag.hlsl": "23e086c24e32e199060a4807b7610be74695832212beb777dfd3ea26565c0285",
+    "shaders/ui.vert.hlsl": "fad7dc090feeb1ed0ed587f0445a2781861e6b7ce2750400c0e61474258037ea",
     "shaders/unlit.frag.hlsl": "ba9acfb808d5d8e8097456b96e2f51b7320b84fc5e7ccf7326999a2858ee89b8",
     "shaders/unlit.vert.hlsl": "efc368047488c3c4c9a38a2a39bb2948d146f33bfa580252f3cbed8376dad268",
-    "scripts/cook_shaders.py": "7f9e12efeeeb41a2215bdf5a72f2c04e95d3afbf0b1ce9fbb0e4262ed1e22540"
+    "scripts/cook_shaders.py": "cd7bd08725638292128297f555a483c1e58d325d944fa19103860fe99ef15f98"
   },
   "outputs": {
     "bloom.frag.dxil": "dc8d9d6eb6077e6843de982ff01fed03060ea224dc432d0f28f64bb49fdbb0af",
@@ -52,6 +54,14 @@
     "tonemap.vert.json": "980f6c799e105808c8262e6d6a1edb7d5fd8467817cb5803fbbf48a569a2d142",
     "tonemap.vert.msl": "9c8f6708d69dde9b8eec651a5ca1ca5c152f13a64831979588b603cbc5705586",
     "tonemap.vert.spv": "d3dc3ad8bd8dcac6daf66726868c598ee8b797626e7171eee3f7e69071626350",
+    "ui.frag.dxil": "25e2922a42e01fb1d10d2665dee9f329601ef0c2522d6a370b445acb0ad96e45",
+    "ui.frag.json": "f869bd1c06f8ce1c7a4378b4aa6df224712dcf4e80236cf97a0a249d0bb18ad6",
+    "ui.frag.msl": "c5f0d5c049d49b6ff56ea1ee66bedbe51830efea4917f35de42685278d17eb4b",
+    "ui.frag.spv": "6842818e05b7c02785ac1a2d023bb3d5b7bfb18684be5179c2ab4c9325db877b",
+    "ui.vert.dxil": "3c4b7291d61fb234e2ca8c4d4654022d43e9696b75bf5bb051997c9a9e2654d5",
+    "ui.vert.json": "b0edea31430c15e4dc6484ecfe5cea509fce1ca7b51b4e2d6580f71a25b17665",
+    "ui.vert.msl": "dee0baecc28488c23ae02346580acc9aa6544c2a659d850789b30ab1029f67e8",
+    "ui.vert.spv": "8abc895cfc50bfd127ab53802291c7c08747f4e3551641f07a5f262098ac10c7",
     "unlit.frag.dxil": "f1d29cc4cb1e1c5687c42581ba413eb26d56c5eed67628c686fbd6368f52842b",
     "unlit.frag.json": "2fa7207aef317be82756e242c99a8c866ef1f31f3a8f4cdd981fa3aa9a181951",
     "unlit.frag.msl": "bcdca37660642a3fa2869b02bf54218d489ceb39392ade65a5892d6caf1b068b",

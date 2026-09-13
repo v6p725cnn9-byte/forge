@@ -131,7 +131,11 @@ std::vector<std::uint8_t> pack_input(const Input& input)
     w.f32(input.move_x);
     w.f32(input.move_z);
     w.f32(input.yaw);
-    w.u8(input.boost ? 1 : 0);
+    std::uint8_t flags = 0;
+    if (input.boost) flags |= 1;
+    if (input.interact) flags |= 2;
+    if (input.place) flags |= 4;
+    w.u8(flags);
     w.finish();
     return w.bytes;
 }
@@ -165,6 +169,13 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
             for (std::uint8_t c = 0; c < n; ++c) w.u8(static_cast<std::uint8_t>(e.text[c]));
         }
     }
+    w.u8(snapshot.hp);
+    w.u8(snapshot.cold);
+    w.u16(snapshot.wood);
+    w.u16(snapshot.stone);
+    w.u8(snapshot.phase);
+    w.u16(snapshot.time_left);
+    w.u8(snapshot.night);
     w.finish();
     return w.bytes;
 }
@@ -198,11 +209,13 @@ bool unpack_welcome(const std::uint8_t* data, std::size_t size, Welcome& welcome
 bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input)
 {
     Reader r{data, size, 0};
-    std::uint8_t boost = 0;
+    std::uint8_t flags = 0;
     if (!r.header(Packet::Input) || !r.u32(input.seq) || !r.f32(input.move_x) || !r.f32(input.move_z) || !r.f32(input.yaw)
-        || !r.u8(boost))
+        || !r.u8(flags))
         return false;
-    input.boost = boost != 0;
+    input.boost = (flags & 1) != 0;
+    input.interact = (flags & 2) != 0;
+    input.place = (flags & 4) != 0;
     return true;
 }
 
@@ -235,7 +248,8 @@ bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snaps
         }
         snapshot.entities.push_back(std::move(ghost));
     }
-    return true;
+    return r.u8(snapshot.hp) && r.u8(snapshot.cold) && r.u16(snapshot.wood) && r.u16(snapshot.stone)
+        && r.u8(snapshot.phase) && r.u16(snapshot.time_left) && r.u8(snapshot.night);
 }
 
 } // namespace forge::net

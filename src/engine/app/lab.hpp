@@ -16,6 +16,8 @@ struct LabInput {
     bool jump = false;
     bool toggle_walk = false;
     bool boost = false;
+    bool interact = false;
+    bool place = false;
     glm::vec3 move{0};
 };
 

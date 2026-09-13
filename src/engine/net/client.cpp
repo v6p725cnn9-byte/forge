@@ -25,7 +25,7 @@ void Client::close()
     sent_.clear();
 }
 
-void Client::send_input(float move_x, float move_z, float yaw, bool boost)
+void Client::send_input(float move_x, float move_z, float yaw, bool boost, bool interact, bool place)
 {
     if (!socket_.valid()) return;
     const auto now = std::chrono::steady_clock::now();
@@ -43,6 +43,8 @@ void Client::send_input(float move_x, float move_z, float yaw, bool boost)
     input.move_z = move_z;
     input.yaw = yaw;
     input.boost = boost;
+    input.interact = interact;
+    input.place = place;
     const auto packet = pack_input(input);
     socket_.send(server_, packet.data(), packet.size());
     sent_[input.seq] = now;

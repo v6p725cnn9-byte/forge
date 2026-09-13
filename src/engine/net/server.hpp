@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/game/session.hpp"
 #include "engine/net/protocol.hpp"
 #include "engine/net/socket.hpp"
 #include "engine/script/registry.hpp"
@@ -12,9 +13,10 @@ namespace forge::net {
 
 class Server {
 public:
-    bool listen(std::uint16_t port = 27015);
+    bool listen(std::uint16_t port = 27015, bool lan = false);
     void close();
     void attach(script::Registry& world);
+    void attach_sim(game::Sim& sim);
     void set_stream_radius(float meters);
     float stream_radius() const { return stream_radius_; }
     void update(float dt);
@@ -29,6 +31,8 @@ private:
         int player_id = -1;
         Input input{};
         std::uint32_t last_seq = 0;
+        bool pending_interact = false;
+        bool pending_place = false;
         std::chrono::steady_clock::time_point last_recv{};
     };
 
@@ -40,6 +44,7 @@ private:
 
     Udp socket_;
     script::Registry* world_ = nullptr;
+    game::Sim* sim_ = nullptr;
     std::vector<Peer> peers_;
     std::uint32_t tick_ = 0;
     float stream_radius_ = kDefaultStreamRadius;

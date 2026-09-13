@@ -151,9 +151,27 @@ bool Host::resize(Uint32 width, Uint32 height, const HostConfig& config)
     return true;
 }
 
+bool Host::apply_display(int width, int height, bool fullscreen, bool vsync)
+{
+    if (!window_ || !device_) return false;
+    if (fullscreen) {
+        if (!SDL_SetWindowFullscreen(window_, true)) return fail("SDL_SetWindowFullscreen");
+    } else {
+        if (!SDL_SetWindowFullscreen(window_, false)) return fail("SDL_SetWindowFullscreen");
+        if (!SDL_SetWindowSize(window_, width, height)) return fail("SDL_SetWindowSize");
+    }
+    auto present = vsync ? SDL_GPU_PRESENTMODE_VSYNC : SDL_GPU_PRESENTMODE_IMMEDIATE;
+    if (!SDL_WindowSupportsGPUPresentMode(device_, window_, present)) {
+        present = vsync ? SDL_GPU_PRESENTMODE_VSYNC : SDL_GPU_PRESENTMODE_MAILBOX;
+        if (!SDL_WindowSupportsGPUPresentMode(device_, window_, present)) present = SDL_GPU_PRESENTMODE_VSYNC;
+    }
+    if (!SDL_SetGPUSwapchainParameters(device_, window_, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, present))
+        SDL_Log("Swapchain present mode fallback: %s", SDL_GetError());
+    return true;
+}
+
 bool Host::present_overlay(Command& command, SDL_GPUTexture* swapchain)
 {
-#if FORGE_DEV_UI
     SDL_GPUColorTargetInfo color{};
     color.texture = swapchain;
     color.load_op = SDL_GPU_LOADOP_LOAD;
@@ -162,10 +180,6 @@ bool Host::present_overlay(Command& command, SDL_GPUTexture* swapchain)
     if (!pass) return fail("SDL_BeginGPURenderPass (overlay)");
     overlay_.render(command.handle, pass);
     SDL_EndGPURenderPass(pass);
-#else
-    (void)command;
-    (void)swapchain;
-#endif
     return true;
 }
 

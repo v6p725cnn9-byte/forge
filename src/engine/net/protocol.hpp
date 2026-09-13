@@ -10,13 +10,22 @@ namespace forge::net {
 constexpr std::uint32_t kMagic = 0x37475246u;
 constexpr std::uint8_t kVersion = 1;
 constexpr std::size_t kMaxPacket = 1400;
-constexpr int kMaxSnapshotEntities = 24;
+constexpr int kMaxSnapshotEntities = 32;
 constexpr float kDefaultStreamRadius = 55.0f;
 constexpr int kTickHz = 20;
 
 enum class Packet : std::uint8_t { Hello = 1, Welcome = 2, Input = 3, Snapshot = 4 };
 
-enum class Kind : std::uint8_t { Player = 1, Vehicle = 2, Marker = 3, Label = 4 };
+enum class Kind : std::uint8_t {
+    Player = 1,
+    Vehicle = 2,
+    Marker = 3,
+    Label = 4,
+    Tree = 5,
+    Rock = 6,
+    Campfire = 7,
+    Extract = 8,
+};
 
 struct Input {
     std::uint32_t seq = 0;
@@ -24,6 +33,8 @@ struct Input {
     float move_z = 0;
     float yaw = 0;
     bool boost = false;
+    bool interact = false;
+    bool place = false;
 };
 
 struct Ghost {
@@ -48,6 +59,13 @@ struct Snapshot {
     std::uint8_t self = 0;
     std::uint32_t ack = 0;
     std::vector<Ghost> entities;
+    std::uint8_t hp = 100;
+    std::uint8_t cold = 0;
+    std::uint16_t wood = 0;
+    std::uint16_t stone = 0;
+    std::uint8_t phase = 0;
+    std::uint16_t time_left = 0;
+    std::uint8_t night = 0;
 };
 
 std::vector<std::uint8_t> pack_hello();

@@ -1,8 +1,8 @@
 +++
 schema = "tomlmd/v1"
 project = "forge"
-version = "0.8.0"
-active_milestone = "M0"
+version = "0.9.0"
+active_milestone = "G1"
 bar = "above-samp"
 visual_target = "gta-iv / sleeping-dogs class"
 
@@ -293,9 +293,9 @@ title = "Interest management / stream distance"
 
 **Стек:** C++20 · SDL3 GPU (Metal / DX12 / Vulkan) · GLM · cgltf · libktx · Jolt · Lua 5.4.
 
-Сейчас (M7): UDP listen-server, снапшоты 20 Гц, стрим по дистанции. Вехи не затираются: `forge_m1`…`forge_m6`, `forge`/`forge_m7`. Проверенный runtime — Metal.
+Сейчас: `forge` открывает главное меню (соло / мультиплеер / настройки / выход). Соло и хост — одна симуляция; друг заходит из меню или `FORGE_CONNECT`. Настройки (графика, управление, звук, язык) пишутся в `settings.cfg`. Лабы `forge_m1`…`forge_m7` остаются.
 
-Открытый хвост — Windows/DX12 (`m0-windows`).
+Открытый хвост движка — Windows/DX12 (`m0-windows`).
 
 ## TOMLMD
 
@@ -319,7 +319,10 @@ GLM — математика. SDL3 GPU — единственный RHI. ImGui �
 ```bash
 cmake --preset macos-debug
 cmake --build --preset macos-debug
-./build/forge       # latest = M7
+./build/forge            # главное меню → сессия
+./build/forge_survival   # same
+FORGE_CONNECT=192.168.0.10:27015 ./build/forge   # сразу join, без меню
+./build/forge_m7         # UDP demo
 ./build/forge_m1    # unlit cubes
 ./build/forge_m2    # PBR helmet
 ./build/forge_m3    # shadows + Jolt walk

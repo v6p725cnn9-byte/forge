@@ -26,6 +26,7 @@ public:
     bool open(const char* title, int width, int height, const std::vector<const char*>& shaders);
     void close();
     bool resize(Uint32 width, Uint32 height, const HostConfig& config);
+    bool apply_display(int width, int height, bool fullscreen, bool vsync);
 
     SDL_Window* window() const { return window_; }
     SDL_GPUDevice* device() const { return device_; }

@@ -44,6 +44,7 @@ struct DebugState {
     float home_pitch = -22.0f;
     const char* model = "";
     const char* lab = "";
+    const char* language = "ru";
     const char* help = "Hold RMB: look + fly | WASD: move | Q/E: down/up";
     const char* gamemode = "";
     std::uint32_t script_players = 0;
@@ -59,6 +60,15 @@ struct DebugState {
     std::uint32_t net_streamed = 0;
     std::uint32_t net_peers = 0;
     float net_ping_ms = 0;
+    bool survival = false;
+    float hp = 100;
+    float cold = 0;
+    std::uint32_t wood = 0;
+    std::uint32_t stone = 0;
+    std::uint32_t time_left = 0;
+    std::uint8_t phase = 0;
+    bool night = false;
+    char join_hint[96]{};
 };
 
 struct ShadowInputs {

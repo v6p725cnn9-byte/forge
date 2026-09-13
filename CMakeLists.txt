@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(forge VERSION 0.8.0 LANGUAGES C CXX)
+project(forge VERSION 0.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -100,24 +100,22 @@ add_library(forge_camera STATIC src/engine/core/camera.cpp)
 target_include_directories(forge_camera PUBLIC src)
 target_link_libraries(forge_camera PUBLIC glm::glm)
 
-if(FORGE_DEV_UI)
-    FetchContent_Declare(imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG f1cc2ae15e53a861a874c3034aae6798fde194ab
-        GIT_PROGRESS TRUE
-    )
-    FetchContent_MakeAvailable(imgui)
-    add_library(forge_imgui STATIC
-        ${imgui_SOURCE_DIR}/imgui.cpp
-        ${imgui_SOURCE_DIR}/imgui_draw.cpp
-        ${imgui_SOURCE_DIR}/imgui_tables.cpp
-        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp
-    )
-    target_include_directories(forge_imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
-    target_link_libraries(forge_imgui PUBLIC SDL3::SDL3)
-endif()
+FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG f1cc2ae15e53a861a874c3034aae6798fde194ab
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(imgui)
+add_library(forge_imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp
+)
+target_include_directories(forge_imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_link_libraries(forge_imgui PUBLIC SDL3::SDL3)
 
 add_library(forge_world STATIC
     src/engine/world/store.cpp
@@ -131,6 +129,10 @@ target_link_libraries(forge_world PUBLIC glm::glm)
 
 add_library(forge_engine STATIC
     src/engine/app/run.cpp
+    src/engine/app/settings.cpp
+    src/engine/app/menu.cpp
+    src/engine/ui/font.cpp
+    src/engine/ui/ui.cpp
     src/engine/core/paths.cpp
     src/engine/dev/overlay.cpp
     src/engine/rhi/host.cpp
@@ -141,10 +143,7 @@ add_library(forge_engine STATIC
     src/engine/render/pbr_scene.cpp
 )
 target_include_directories(forge_engine PUBLIC src)
-target_link_libraries(forge_engine PUBLIC SDL3::SDL3 forge_camera forge_assets forge_asset_deps forge_world ktx_read)
-if(FORGE_DEV_UI)
-    target_link_libraries(forge_engine PUBLIC forge_imgui)
-endif()
+target_link_libraries(forge_engine PUBLIC SDL3::SDL3 forge_camera forge_assets forge_asset_deps forge_world ktx_read forge_imgui)
 target_compile_definitions(forge_engine PUBLIC
     FORGE_VERSION="${PROJECT_VERSION}"
     FORGE_DEV_UI=$<BOOL:${FORGE_DEV_UI}>
@@ -168,6 +167,15 @@ else()
     target_compile_options(forge_script PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_library(forge_game STATIC src/engine/game/session.cpp)
+target_include_directories(forge_game PUBLIC src)
+target_link_libraries(forge_game PUBLIC glm::glm forge_script)
+if(MSVC)
+    target_compile_options(forge_game PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(forge_game PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_library(forge_net STATIC
     src/engine/net/socket.cpp
     src/engine/net/protocol.cpp
@@ -176,7 +184,7 @@ add_library(forge_net STATIC
     src/engine/net/client.cpp
 )
 target_include_directories(forge_net PUBLIC src)
-target_link_libraries(forge_net PUBLIC forge_script glm::glm)
+target_link_libraries(forge_net PUBLIC forge_script forge_game glm::glm)
 if(WIN32)
     target_link_libraries(forge_net PUBLIC ws2_32)
 endif()
@@ -214,6 +222,12 @@ add_custom_target(forge_stage_runtime
         ${CMAKE_SOURCE_DIR}/assets/models/Fox/LICENSE.md
         ${CMAKE_SOURCE_DIR}/assets/models/Fox/SOURCE.txt
         ${CMAKE_BINARY_DIR}/assets/models/Fox
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_BINARY_DIR}/assets/fonts
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_SOURCE_DIR}/assets/fonts/DroidSans.ttf
+        ${CMAKE_SOURCE_DIR}/assets/fonts/LICENSE.txt
+        ${CMAKE_BINARY_DIR}/assets/fonts
     COMMAND ${CMAKE_COMMAND} -E make_directory
         ${CMAKE_BINARY_DIR}/scripts
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -261,11 +275,13 @@ forge_lab(forge_m4 tests/m4/main.cpp tests/m4/lab.cpp)
 forge_lab(forge_m5 tests/m5/main.cpp tests/m5/lab.cpp)
 forge_lab(forge_m6 tests/m6/main.cpp tests/m6/lab.cpp)
 forge_lab(forge_m7 tests/m7/main.cpp tests/m7/lab.cpp)
-forge_lab(forge tests/m7/main.cpp tests/m7/lab.cpp)
+forge_lab(forge_survival tests/survival/main.cpp tests/survival/lab.cpp tests/survival/shell.cpp)
+forge_lab(forge tests/survival/main.cpp tests/survival/lab.cpp tests/survival/shell.cpp)
 target_link_libraries(forge_m3 PRIVATE forge_physics)
 target_link_libraries(forge_m5 PRIVATE forge_physics)
 target_link_libraries(forge_m6 PRIVATE forge_physics forge_script)
 target_link_libraries(forge_m7 PRIVATE forge_net)
+target_link_libraries(forge_survival PRIVATE forge_net)
 target_link_libraries(forge PRIVATE forge_net)
 
 if(BUILD_TESTING)
@@ -295,6 +311,19 @@ if(BUILD_TESTING)
     target_link_libraries(net_tests PRIVATE forge_net)
     add_test(NAME net COMMAND net_tests)
 
+    add_executable(survival_tests tests/survival_tests.cpp)
+    target_link_libraries(survival_tests PRIVATE forge_game forge_net)
+    add_test(NAME survival COMMAND survival_tests)
+
+    add_executable(settings_tests tests/settings_tests.cpp)
+    target_link_libraries(settings_tests PRIVATE forge_engine)
+    add_test(NAME settings COMMAND settings_tests)
+
+    add_executable(ui_tests tests/ui_tests.cpp)
+    target_link_libraries(ui_tests PRIVATE forge_engine)
+    add_test(NAME ui_font COMMAND ui_tests)
+    set_tests_properties(ui_font PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+
     add_test(NAME shader_assets COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/cook_shaders.py --check)
     add_test(NAME shader_asset_failures COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/shader_assets_test.py)
     add_test(NAME texture_assets COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/cook_textures.py --check)
@@ -305,7 +334,8 @@ if(BUILD_TESTING)
         add_test(NAME gpu_smoke_m4 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m4>)
         add_test(NAME gpu_smoke_m5 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m5>)
         add_test(NAME gpu_smoke_m6 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m6>)
-        add_test(NAME gpu_smoke_m7 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge>)
-        set_tests_properties(gpu_smoke_m1 gpu_smoke_m2 gpu_smoke_m3 gpu_smoke_m4 gpu_smoke_m5 gpu_smoke_m6 gpu_smoke_m7 PROPERTIES TIMEOUT 90 LABELS gpu)
+        add_test(NAME gpu_smoke_m7 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m7>)
+        add_test(NAME gpu_smoke_survival COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge>)
+        set_tests_properties(gpu_smoke_m1 gpu_smoke_m2 gpu_smoke_m3 gpu_smoke_m4 gpu_smoke_m5 gpu_smoke_m6 gpu_smoke_m7 gpu_smoke_survival PROPERTIES TIMEOUT 90 LABELS gpu)
     endif()
 endif()

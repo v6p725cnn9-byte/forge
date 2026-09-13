@@ -14,16 +14,23 @@ public:
     bool wants_mouse() const;
     bool wants_keyboard() const;
     void toggle() { visible_ = !visible_; }
-    void build(Camera& camera, forge::render::DebugState& debug, const char* backend, Uint32 width,
-               Uint32 height, Uint32 triangles, bool captured);
+    bool visible() const { return visible_; }
+    bool ready() const { return initialized_; }
+    void begin_frame();
+    void end_frame();
+    void draw_debug(Camera& camera, forge::render::DebugState& debug, const char* backend, Uint32 width,
+                    Uint32 height, Uint32 triangles, bool captured);
+    void draw_hud(const forge::render::DebugState& debug);
+    void draw_world_labels(const Camera& camera, const forge::render::DebugState& debug, Uint32 width, Uint32 height);
+    void build(Camera& camera, forge::render::DebugState& debug, const char* backend, Uint32 width, Uint32 height,
+               Uint32 triangles, bool captured);
     void prepare(SDL_GPUCommandBuffer* command);
     void render(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pass);
 
 private:
-#if FORGE_DEV_UI
     bool initialized_ = false;
-#endif
     bool visible_ = true;
+    bool frame_open_ = false;
 };
 
 } // namespace forge::dev

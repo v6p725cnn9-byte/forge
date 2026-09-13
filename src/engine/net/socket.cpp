@@ -9,6 +9,7 @@
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -70,6 +71,7 @@ Handle as_handle(std::uintptr_t fd) { return static_cast<Handle>(fd); }
 } // namespace
 
 Address localhost(std::uint16_t port) { return {0x7F000001u, port}; }
+Address any(std::uint16_t port) { return {0u, port}; }
 
 bool parse_address(const std::string& text, Address& out)
 {
@@ -157,6 +159,26 @@ int Udp::receive(Address& from, void* data, std::size_t size)
     if (got < 0) return last_would_block() ? 0 : -1;
     from = from_sock(sock);
     return got;
+}
+
+std::vector<std::string> ipv4_addresses()
+{
+    std::vector<std::string> out;
+#ifndef _WIN32
+    ifaddrs* list = nullptr;
+    if (getifaddrs(&list) != 0) return out;
+    for (auto* iface = list; iface; iface = iface->ifa_next) {
+        if (!iface->ifa_addr || iface->ifa_addr->sa_family != AF_INET) continue;
+        const auto* in = reinterpret_cast<sockaddr_in*>(iface->ifa_addr);
+        const auto host = ntohl(in->sin_addr.s_addr);
+        if ((host & 0xFF000000u) == 0x7F000000u) continue;
+        char buf[INET_ADDRSTRLEN]{};
+        inet_ntop(AF_INET, &in->sin_addr, buf, sizeof(buf));
+        if (buf[0]) out.emplace_back(buf);
+    }
+    freeifaddrs(list);
+#endif
+    return out;
 }
 
 } // namespace forge::net

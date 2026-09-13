@@ -53,6 +53,8 @@ cmake --build --preset macos-debug
 ./build/forge_m5
 ./build/forge_m6
 ./build/forge_m7
+./build/forge_survival
+./build/forge          # survival session (solo or host)
 ```
 
 Milestone labs live in `tests/mN/`. Do not delete an old lab when adding a new one. `forge` always aliases the latest lab.

@@ -25,6 +25,8 @@ STAGES = {
     "tonemap.vert": {"stage": "vertex", "uniform_buffers": 0, "samplers": 0},
     "tonemap.frag": {"stage": "fragment", "uniform_buffers": 1, "samplers": 2},
     "bloom.frag": {"stage": "fragment", "uniform_buffers": 1, "samplers": 1},
+    "ui.vert": {"stage": "vertex", "uniform_buffers": 0, "samplers": 0},
+    "ui.frag": {"stage": "fragment", "uniform_buffers": 0, "samplers": 1},
 }
 FORMATS = {"msl": "MSL", "spv": "SPIRV", "dxil": "DXIL", "json": "JSON"}
 

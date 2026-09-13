@@ -11,6 +11,7 @@ public:
     float pitch = -22.0f;
     float speed = 6.0f;
     float sensitivity = 0.12f;
+    bool invert_y = false;
     float vertical_fov = 60.0f;
     float near_plane = 0.1f;
     float far_plane = 500.0f;
