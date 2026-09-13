@@ -1,0 +1,64 @@
+#pragma once
+
+#include <glm/glm.hpp>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace forge::net {
+
+constexpr std::uint32_t kMagic = 0x37475246u;
+constexpr std::uint8_t kVersion = 1;
+constexpr std::size_t kMaxPacket = 1400;
+constexpr int kMaxSnapshotEntities = 24;
+constexpr float kDefaultStreamRadius = 55.0f;
+constexpr int kTickHz = 20;
+
+enum class Packet : std::uint8_t { Hello = 1, Welcome = 2, Input = 3, Snapshot = 4 };
+
+enum class Kind : std::uint8_t { Player = 1, Vehicle = 2, Marker = 3, Label = 4 };
+
+struct Input {
+    std::uint32_t seq = 0;
+    float move_x = 0;
+    float move_z = 0;
+    float yaw = 0;
+    bool boost = false;
+};
+
+struct Ghost {
+    Kind kind = Kind::Player;
+    std::uint8_t id = 0;
+    glm::vec3 position{0};
+    float yaw = 0;
+    float size = 1;
+    glm::vec4 color{1};
+    std::string name;
+    std::string text;
+};
+
+struct Welcome {
+    std::uint8_t player_id = 0;
+    std::uint8_t tick_hz = kTickHz;
+    float stream_radius = kDefaultStreamRadius;
+};
+
+struct Snapshot {
+    std::uint32_t tick = 0;
+    std::uint8_t self = 0;
+    std::uint32_t ack = 0;
+    std::vector<Ghost> entities;
+};
+
+std::vector<std::uint8_t> pack_hello();
+std::vector<std::uint8_t> pack_welcome(const Welcome& welcome);
+std::vector<std::uint8_t> pack_input(const Input& input);
+std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot);
+
+bool unpack_type(const std::uint8_t* data, std::size_t size, Packet& type);
+bool unpack_hello(const std::uint8_t* data, std::size_t size);
+bool unpack_welcome(const std::uint8_t* data, std::size_t size, Welcome& welcome);
+bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input);
+bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snapshot);
+
+} // namespace forge::net

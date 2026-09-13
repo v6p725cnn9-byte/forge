@@ -1,0 +1,37 @@
+{
+  "inputs": {
+    "FlightHelmet_Materials_GlassPlasticMat_BaseColor.png": "0914544aabe161046f417274051e34ecc85163cfce6698581b3e1e18c96fe4f1",
+    "FlightHelmet_Materials_GlassPlasticMat_Normal.png": "c297f18f3b4259fc8b411cdc843a4a44b8cef3e3a53b21cec7b53574e5ef6872",
+    "FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.png": "d4519704f15395c7138421a5814b478df549a2411bc6fa97dd6d02ba62dc6c54",
+    "FlightHelmet_Materials_LeatherPartsMat_BaseColor.png": "c9346ac6daa3ad34d0b36c1e7cf311ccbcc298710ea453cdf3b6ad40dc60013f",
+    "FlightHelmet_Materials_LeatherPartsMat_Normal.png": "7fb69b26f80c67df41e87d7344bde9d24dda0be77546b0a6acabc4040694872a",
+    "FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.png": "b77e60f175e4632cd3d892bc9f0e748f522c9288a469585d5cb90270cd68910e",
+    "FlightHelmet_Materials_LensesMat_BaseColor.png": "b55f6561f8adabc907360443aab010f3effaf05074fdccea46d8c2d66247cf16",
+    "FlightHelmet_Materials_LensesMat_Normal.png": "430775894001933044c89070b1bfd4f9b8489f74780b1ab7079efb0afca95d8d",
+    "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.png": "35d81a71ab184f9b50f63ff8f3e0f90cfb6c99f9b2d9ed9d9887a902c16a458d",
+    "FlightHelmet_Materials_MetalPartsMat_BaseColor.png": "8e26add3ad1b2398d58638580bb1fe56f2fbae3572b4a682b6595a5a26fb1b40",
+    "FlightHelmet_Materials_MetalPartsMat_Normal.png": "a833fcc12718c02bcba97cbc9760d06c4a711ce7f36c23076e7cf6d4393a80e7",
+    "FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.png": "17f3e27b51011b8f98751dae25958e2b850fcf1467f1019bec812553e0e5eb1d",
+    "FlightHelmet_Materials_RubberWoodMat_BaseColor.png": "f751d643d1f220b300705d9ad57ed284a883eb7d3788469199b752f4381dcc37",
+    "FlightHelmet_Materials_RubberWoodMat_Normal.png": "bb70753c836c59db7e245e5fe2c9db8eee833d29d67e03da348f6adb1e95142a",
+    "FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.png": "2727d4638514f75fcbd29777bf03db6bd2f0f1ad926e2976cf2346aa22c0bd19",
+    "recipe": "d2b7eb73740055f55bbb49e4bc0b1644e071128e482684d5db4ab8174c0e8b17"
+  },
+  "outputs": {
+    "FlightHelmet_Materials_GlassPlasticMat_BaseColor.ktx2": "806d63f23c7c7cee2120cdddae9a48bc93240c9df5d5b513f31df9595ffcce37",
+    "FlightHelmet_Materials_GlassPlasticMat_Normal.ktx2": "c5022a85075f5be42366b116dd46f3ddcbbd86e42497703584074d5f66ff35e0",
+    "FlightHelmet_Materials_GlassPlasticMat_OcclusionRoughMetal.ktx2": "6466be0d62c6d308624c9ea65be8f76df260b1560b4b5b2c0737b3785a0298e8",
+    "FlightHelmet_Materials_LeatherPartsMat_BaseColor.ktx2": "fbdb0e3c36d38b7d64ce66c41d95be673ebaed5cf080a0c4cc65ab58729c2405",
+    "FlightHelmet_Materials_LeatherPartsMat_Normal.ktx2": "f5a7628c462f49e2628fe8f936115e21f98e1463f52bc5ee0142f2bb489b56a7",
+    "FlightHelmet_Materials_LeatherPartsMat_OcclusionRoughMetal.ktx2": "4365918c688449bb93f8f9e8bce94ed1dafb267934bceffac857495b18962a7a",
+    "FlightHelmet_Materials_LensesMat_BaseColor.ktx2": "5cd8ff4b5801d6ca901c6de2b748b3bad4e30bfac3d4bfb1ad5f23b90710c320",
+    "FlightHelmet_Materials_LensesMat_Normal.ktx2": "40e10f37291eb4d1f164e954426bcd227ea63da722256fa528bdc893684baa72",
+    "FlightHelmet_Materials_LensesMat_OcclusionRoughMetal.ktx2": "6295f5fbe77286a47c43c91d5bc14b2b46e292f5bf260290f282f56f7620fec1",
+    "FlightHelmet_Materials_MetalPartsMat_BaseColor.ktx2": "fe38a939402433379bd6d5fa9e05580b16978039a1f84d81fccccd85decbe261",
+    "FlightHelmet_Materials_MetalPartsMat_Normal.ktx2": "67f9d7d7bd7cb5c8fd00c4fd8e15cea21caeb4635fbfec8215c642fe7f7c477f",
+    "FlightHelmet_Materials_MetalPartsMat_OcclusionRoughMetal.ktx2": "2f48e400d0f713568ed4f1420019a3f36de1fc001db0a5bb332adadc3159ead0",
+    "FlightHelmet_Materials_RubberWoodMat_BaseColor.ktx2": "b5dcf07f8f304b4fc53559e163c5bcacb7a5dd4e2836969682f556e63ec0b0d7",
+    "FlightHelmet_Materials_RubberWoodMat_Normal.ktx2": "9221911994d842a6e3f9f273a7652b9f8f940352d1be06724d941b9104c62b8c",
+    "FlightHelmet_Materials_RubberWoodMat_OcclusionRoughMetal.ktx2": "4ac9f9cf2133e86ca79debd4709dde9383a964acabdec885e23ed62283dad234"
+  }
+}

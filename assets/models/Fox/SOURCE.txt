@@ -1,0 +1,5 @@
+https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Fox
+glTF-Binary/Fox.glb
+Model: PixelMannen (CC0)
+Rigging & Animation: tomkranis (CC-BY 4.0)
+glTF conversion: @AsoboStudio and @scurest (CC-BY 4.0)

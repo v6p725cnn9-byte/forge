@@ -1,0 +1,68 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct type_Camera
+{
+    float4x4 view_projection;
+    float4x4 model;
+};
+
+struct type_Joints
+{
+    float4x4 joints[48];
+};
+
+struct main0_out
+{
+    float3 out_var_TEXCOORD0 [[user(locn0)]];
+    float3 out_var_TEXCOORD1 [[user(locn1)]];
+    float4 out_var_TEXCOORD2 [[user(locn2)]];
+    float2 out_var_TEXCOORD3 [[user(locn3)]];
+    float2 out_var_TEXCOORD4 [[user(locn4)]];
+    float4 out_var_TEXCOORD5 [[user(locn5)]];
+    float4 gl_Position [[position]];
+};
+
+struct main0_in
+{
+    float3 in_var_TEXCOORD0 [[attribute(0)]];
+    float3 in_var_TEXCOORD1 [[attribute(1)]];
+    float4 in_var_TEXCOORD2 [[attribute(2)]];
+    float2 in_var_TEXCOORD3 [[attribute(3)]];
+    float2 in_var_TEXCOORD4 [[attribute(4)]];
+    float4 in_var_TEXCOORD5 [[attribute(5)]];
+    float4 in_var_TEXCOORD6 [[attribute(6)]];
+    float4 in_var_TEXCOORD7 [[attribute(7)]];
+};
+
+vertex main0_out main0(main0_in in [[stage_in]], constant type_Camera& Camera [[buffer(0)]], constant type_Joints& Joints [[buffer(1)]])
+{
+    main0_out out = {};
+    float4x4 _72 = Joints.joints[int(in.in_var_TEXCOORD6.x + 0.5)] * in.in_var_TEXCOORD7.x;
+    float4x4 _81 = Joints.joints[int(in.in_var_TEXCOORD6.y + 0.5)] * in.in_var_TEXCOORD7.y;
+    float4x4 _102 = Joints.joints[int(in.in_var_TEXCOORD6.z + 0.5)] * in.in_var_TEXCOORD7.z;
+    float4x4 _119 = Joints.joints[int(in.in_var_TEXCOORD6.w + 0.5)] * in.in_var_TEXCOORD7.w;
+    float4x4 _135;
+    if ((((in.in_var_TEXCOORD7.x + in.in_var_TEXCOORD7.y) + in.in_var_TEXCOORD7.z) + in.in_var_TEXCOORD7.w) < 9.9999997473787516355514526367188e-06)
+    {
+        _135 = float4x4(float4(1.0, 0.0, 0.0, 0.0), float4(0.0, 1.0, 0.0, 0.0), float4(0.0, 0.0, 1.0, 0.0), float4(0.0, 0.0, 0.0, 1.0));
+    }
+    else
+    {
+        _135 = float4x4(((float4(_72[0][0], _72[1][0], _72[2][0], _72[3][0]) + float4(_81[0][0], _81[1][0], _81[2][0], _81[3][0])) + float4(_102[0][0], _102[1][0], _102[2][0], _102[3][0])) + float4(_119[0][0], _119[1][0], _119[2][0], _119[3][0]), ((float4(_72[0][1], _72[1][1], _72[2][1], _72[3][1]) + float4(_81[0][1], _81[1][1], _81[2][1], _81[3][1])) + float4(_102[0][1], _102[1][1], _102[2][1], _102[3][1])) + float4(_119[0][1], _119[1][1], _119[2][1], _119[3][1]), ((float4(_72[0][2], _72[1][2], _72[2][2], _72[3][2]) + float4(_81[0][2], _81[1][2], _81[2][2], _81[3][2])) + float4(_102[0][2], _102[1][2], _102[2][2], _102[3][2])) + float4(_119[0][2], _119[1][2], _119[2][2], _119[3][2]), ((float4(_72[0][3], _72[1][3], _72[2][3], _72[3][3]) + float4(_81[0][3], _81[1][3], _81[2][3], _81[3][3])) + float4(_102[0][3], _102[1][3], _102[2][3], _102[3][3])) + float4(_119[0][3], _119[1][3], _119[2][3], _119[3][3]));
+    }
+    float4 _143 = Camera.model * (float4(in.in_var_TEXCOORD0, 1.0) * _135);
+    float3x3 _154 = float3x3(_135[0].xyz, _135[1].xyz, _135[2].xyz);
+    float3x3 _161 = float3x3(float4(Camera.model[0][0], Camera.model[1][0], Camera.model[2][0], Camera.model[3][0]).xyz, float4(Camera.model[0][1], Camera.model[1][1], Camera.model[2][1], Camera.model[3][1]).xyz, float4(Camera.model[0][2], Camera.model[1][2], Camera.model[2][2], Camera.model[3][2]).xyz);
+    out.gl_Position = Camera.view_projection * _143;
+    out.out_var_TEXCOORD0 = _143.xyz;
+    out.out_var_TEXCOORD1 = (in.in_var_TEXCOORD1 * _154) * _161;
+    out.out_var_TEXCOORD2 = float4((in.in_var_TEXCOORD2.xyz * _154) * _161, in.in_var_TEXCOORD2.w);
+    out.out_var_TEXCOORD3 = in.in_var_TEXCOORD3;
+    out.out_var_TEXCOORD4 = in.in_var_TEXCOORD4;
+    out.out_var_TEXCOORD5 = in.in_var_TEXCOORD5;
+    return out;
+}
+

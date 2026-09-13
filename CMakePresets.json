@@ -1,0 +1,37 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "macos-debug",
+      "displayName": "macOS Debug (Ninja + Metal)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "/opt/homebrew",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "macos-release",
+      "displayName": "macOS Release (Ninja + Metal)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_PREFIX_PATH": "/opt/homebrew",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "FORGE_DEV_UI": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "macos-debug", "configurePreset": "macos-debug" },
+    { "name": "macos-release", "configurePreset": "macos-release" }
+  ],
+  "testPresets": [
+    { "name": "macos-debug", "configurePreset": "macos-debug", "output": { "outputOnFailure": true } },
+    { "name": "macos-release", "configurePreset": "macos-release", "output": { "outputOnFailure": true } }
+  ]
+}
