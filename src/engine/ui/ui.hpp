@@ -4,6 +4,7 @@
 #include "engine/ui/font.hpp"
 
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -21,6 +22,45 @@ struct Color {
 
 inline Color rgba(float r, float g, float b, float a = 1.0f) { return {r, g, b, a}; }
 
+// Per-text effects in the UMG spirit, resolved against the SDF atlas.
+// Outline and glow share the atlas padding, so very wide values clamp;
+// zeroed effects cost nothing and keep solid quads untouched.
+struct TextStyle {
+    Color outline{0, 0, 0, 0};
+    float outline_px = 0;
+    float softness_px = 0;
+    Color glow{0, 0, 0, 0};
+    float glow_px = 0;
+    float glow_strength = 1.0f;
+    Color shadow{0, 0, 0, 0};
+    float shadow_x = 0;
+    float shadow_y = 0;
+};
+
+// Shader-ready SDF thresholds in normalized distance units (edge = 0.5).
+struct TextFx {
+    float outline_outer = 0.5f;
+    float aa = 0.0f;
+    float glow_outer = 0.5f;
+    float glow_strength = 0.0f;
+};
+
+inline TextFx resolve_text_fx(const TextStyle& style, float scale, float sdf_texels_per_px, float sdf_units_per_texel)
+{
+    TextFx fx;
+    if (scale <= 0.0f || sdf_texels_per_px <= 0.0f || sdf_units_per_texel <= 0.0f) return fx;
+    const float units_per_px = sdf_texels_per_px / scale * sdf_units_per_texel;
+    fx.aa = units_per_px * std::max(1.0f, style.softness_px);
+    if (style.outline_px > 0.0f && style.outline.a > 0.0f)
+        fx.outline_outer = std::max(0.0f, 0.5f - style.outline_px * units_per_px);
+    const float extent = style.outline_px + style.glow_px;
+    if (style.glow_strength > 0.0f && style.glow.a > 0.0f && extent > style.outline_px) {
+        fx.glow_outer = std::max(0.0f, 0.5f - extent * units_per_px);
+        fx.glow_strength = style.glow_strength;
+    }
+    return fx;
+}
+
 class Ui {
 public:
     bool create(rhi::Host& host);
@@ -33,6 +73,9 @@ public:
     void quad(Rect rect, Color color);
     void text(float x, float y, std::string_view s, Color color, float scale = 1.0f);
     void text_center(float cx, float y, std::string_view s, Color color, float scale = 1.0f);
+    void set_text_style(const TextStyle& style) { text_style_ = style; }
+    void reset_text_style() { text_style_ = {}; }
+    const TextStyle& text_style() const { return text_style_; }
     bool button(std::uint32_t id, Rect rect, std::string_view label);
     bool checkbox(std::uint32_t id, Rect rect, bool* value, std::string_view label);
     bool slider(std::uint32_t id, Rect rect, float* value, float min, float max, std::string_view label);
@@ -48,9 +91,13 @@ public:
 private:
     struct Vertex {
         float x, y, u, v, r, g, b, a;
+        float or_, og, ob, oa;
+        float gr, gg, gb, ga;
+        float fx_outer, fx_aa, fx_glow, fx_gs;
     };
 
     void vertex(float x, float y, float u, float v, Color color);
+    void glyph_vertex(float x, float y, float u, float v, Color color, const TextStyle& style, const TextFx& fx);
     bool hit(Rect rect) const;
     std::uint32_t hot_ = 0;
     std::uint32_t active_ = 0;
@@ -61,6 +108,7 @@ private:
     bool was_down_ = false;
     float mx_ = 0, my_ = 0;
     int width_ = 1, height_ = 1;
+    TextStyle text_style_{};
     std::string typed_;
     bool backspace_ = false;
     Font font_;

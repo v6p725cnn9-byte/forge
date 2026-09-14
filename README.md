@@ -146,6 +146,18 @@ status = "done"
 title = "Normalize diagonal WASD so packets pass input validation and diagonals move"
 
 [[tasks]]
+id = "g1-msdf-font"
+milestone = "G1"
+status = "done"
+title = "MSDF font atlas via stb SDF plus distance-resolving UI shader"
+
+[[tasks]]
+id = "g1-ui-text-fx"
+milestone = "G1"
+status = "done"
+title = "UMG-style text effects: outline, softness, glow and shadow on the SDF atlas"
+
+[[tasks]]
 id = "m0-windows-local-launch"
 milestone = "M0"
 status = "done"
@@ -554,3 +566,5 @@ Smoke использует временный файл настроек и не 
 - [x] `g1-jump-headless` — прыжок через UDP с гравитацией на сервере и тело от 1-го лица без головы как в CS2
 - [x] `g1-strafe-facing` — тело смотрит за камерой, S/A/D идут стрейфом без разворота на 180°
 - [x] `g1-diagonal-walk` — нормализация диагоналей WASD, пакеты проходят валидацию, диагонали двигают
+- [x] `g1-msdf-font` — MSDF-атлас шрифта через stb SDF и UI-шейдер с резолвом дистанции
+- [x] `g1-ui-text-fx` — текстовые эффекты в духе UMG: outline, softness, glow и shadow на SDF-атласе

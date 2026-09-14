@@ -101,6 +101,9 @@ bool Ui::create(rhi::Host& host)
         {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},
         {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 8},
         {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 16},
+        {3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 32},
+        {4, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 48},
+        {5, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 64},
     };
     SDL_GPUColorTargetDescription color{};
     color.format = SDL_GetGPUSwapchainTextureFormat(host.device(), host.window());
@@ -119,7 +122,7 @@ bool Ui::create(rhi::Host& host)
     info.vertex_input_state.vertex_buffer_descriptions = &buffer;
     info.vertex_input_state.num_vertex_buffers = 1;
     info.vertex_input_state.vertex_attributes = attributes;
-    info.vertex_input_state.num_vertex_attributes = 3;
+    info.vertex_input_state.num_vertex_attributes = 6;
     info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
     info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
@@ -168,7 +171,7 @@ void Ui::key_backspace() { backspace_ = true; }
 
 void Ui::vertex(float px, float py, float u, float v, Color color)
 {
-    Vertex out;
+    Vertex out{};
     out.x = (px / static_cast<float>(width_)) * 2.0f - 1.0f;
     out.y = 1.0f - (py / static_cast<float>(height_)) * 2.0f;
     out.u = u;
@@ -177,6 +180,39 @@ void Ui::vertex(float px, float py, float u, float v, Color color)
     out.g = color.g;
     out.b = color.b;
     out.a = color.a;
+    out.fx_outer = 0.5f;
+    out.fx_aa = 0.02f;
+    out.fx_glow = 0.5f;
+    out.fx_gs = 0.0f;
+    verts_.push_back(out);
+}
+
+void Ui::glyph_vertex(float px, float py, float u, float v, Color color, const TextStyle& style, const TextFx& fx)
+{
+    Vertex out{};
+    out.x = (px / static_cast<float>(width_)) * 2.0f - 1.0f;
+    out.y = 1.0f - (py / static_cast<float>(height_)) * 2.0f;
+    out.u = u;
+    out.v = v;
+    out.r = color.r;
+    out.g = color.g;
+    out.b = color.b;
+    out.a = color.a;
+    // With no outline the shader lerps between identical colors, so plain text
+    // keeps the exact old blending (unpremultiplied rgb, coverage in alpha).
+    const Color outline = fx.outline_outer < 0.5f ? style.outline : color;
+    out.or_ = outline.r;
+    out.og = outline.g;
+    out.ob = outline.b;
+    out.oa = outline.a;
+    out.gr = style.glow.r;
+    out.gg = style.glow.g;
+    out.gb = style.glow.b;
+    out.ga = style.glow.a;
+    out.fx_outer = fx.outline_outer;
+    out.fx_aa = fx.aa;
+    out.fx_glow = fx.glow_outer;
+    out.fx_gs = fx.glow_strength;
     verts_.push_back(out);
 }
 
@@ -195,29 +231,39 @@ void Ui::quad(Rect rect, Color color)
 
 void Ui::text(float x, float y, std::string_view s, Color color, float scale)
 {
-    const char* p = s.data();
-    const char* end = p + s.size();
-    float pen = x;
-    const float baseline = y + font_.ascent() * scale;
-    while (p < end) {
-        const auto cp = utf8_next(p, end);
-        if (cp == 0) break;
-        const auto* g = font_.glyph(cp);
-        if (!g) {
-            pen += font_.size() * 0.45f * scale;
-            continue;
+    const TextStyle& style = text_style_;
+    const TextFx fx = resolve_text_fx(style, scale, font_.sdf_texels_per_px(), font_.sdf_units_per_texel());
+    const bool shadow = style.shadow.a > 0.0f && (style.shadow_x != 0.0f || style.shadow_y != 0.0f);
+    for (int pass = 0; pass < (shadow ? 2 : 1); ++pass) {
+        // Silhouette first: same outline shape in the shadow color, main pass on top.
+        const float dx = (pass == 0 && shadow) ? style.shadow_x * scale : 0.0f;
+        const float dy = (pass == 0 && shadow) ? style.shadow_y * scale : 0.0f;
+        const Color pass_color = (pass == 0 && shadow) ? style.shadow : color;
+        const TextStyle pass_style = (pass == 0 && shadow) ? TextStyle{.outline = style.shadow} : style;
+        const char* p = s.data();
+        const char* end = p + s.size();
+        float pen = x;
+        const float baseline = y + font_.ascent() * scale;
+        while (p < end) {
+            const auto cp = utf8_next(p, end);
+            if (cp == 0) break;
+            const auto* g = font_.glyph(cp);
+            if (!g) {
+                pen += font_.size() * 0.45f * scale;
+                continue;
+            }
+            const float x0 = pen + g->x0 * scale + dx;
+            const float y0 = baseline + g->y0 * scale + dy;
+            const float x1 = pen + g->x1 * scale + dx;
+            const float y1 = baseline + g->y1 * scale + dy;
+            glyph_vertex(x0, y0, g->u0, g->v0, pass_color, pass_style, fx);
+            glyph_vertex(x1, y0, g->u1, g->v0, pass_color, pass_style, fx);
+            glyph_vertex(x1, y1, g->u1, g->v1, pass_color, pass_style, fx);
+            glyph_vertex(x0, y0, g->u0, g->v0, pass_color, pass_style, fx);
+            glyph_vertex(x1, y1, g->u1, g->v1, pass_color, pass_style, fx);
+            glyph_vertex(x0, y1, g->u0, g->v1, pass_color, pass_style, fx);
+            pen += g->advance * scale;
         }
-        const float x0 = pen + g->x0 * scale;
-        const float y0 = baseline + g->y0 * scale;
-        const float x1 = pen + g->x1 * scale;
-        const float y1 = baseline + g->y1 * scale;
-        vertex(x0, y0, g->u0, g->v0, color);
-        vertex(x1, y0, g->u1, g->v0, color);
-        vertex(x1, y1, g->u1, g->v1, color);
-        vertex(x0, y0, g->u0, g->v0, color);
-        vertex(x1, y1, g->u1, g->v1, color);
-        vertex(x0, y1, g->u0, g->v1, color);
-        pen += g->advance * scale;
     }
 }
 

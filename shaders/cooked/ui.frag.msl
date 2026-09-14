@@ -12,12 +12,19 @@ struct main0_in
 {
     float2 in_var_TEXCOORD0 [[user(locn0)]];
     float4 in_var_TEXCOORD1 [[user(locn1)]];
+    float4 in_var_TEXCOORD2 [[user(locn2)]];
+    float4 in_var_TEXCOORD3 [[user(locn3)]];
+    float4 in_var_TEXCOORD4 [[user(locn4)]];
 };
 
 fragment main0_out main0(main0_in in [[stage_in]], texture2d<float> atlas [[texture(0)]], sampler atlas_sampler [[sampler(0)]])
 {
     main0_out out = {};
-    out.out_var_SV_Target0 = float4(in.in_var_TEXCOORD1.xyz, in.in_var_TEXCOORD1.w * atlas.sample(atlas_sampler, in.in_var_TEXCOORD0).x);
+    float4 _41 = atlas.sample(atlas_sampler, in.in_var_TEXCOORD0);
+    float _42 = _41.x;
+    float _47 = smoothstep(0.5 - in.in_var_TEXCOORD4.y, 0.5 + in.in_var_TEXCOORD4.y, _42);
+    float _62 = ((1.0 - smoothstep(in.in_var_TEXCOORD4.z, 0.5, _42)) * in.in_var_TEXCOORD4.w) * in.in_var_TEXCOORD3.w;
+    out.out_var_SV_Target0 = float4(mix(in.in_var_TEXCOORD2.xyz, in.in_var_TEXCOORD1.xyz, float3(_47)) + (in.in_var_TEXCOORD3.xyz * _62), precise::max(mix(in.in_var_TEXCOORD2.w, in.in_var_TEXCOORD1.w, _47) * smoothstep(in.in_var_TEXCOORD4.x - in.in_var_TEXCOORD4.y, in.in_var_TEXCOORD4.x + in.in_var_TEXCOORD4.y, _42), _62));
     return out;
 }
 

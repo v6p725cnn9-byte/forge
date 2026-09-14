@@ -51,9 +51,17 @@ MenuResult Menu::draw(ui::Ui& ui)
 {
     MenuResult result;
     const auto title = t(settings_, "title");
+    ui::TextStyle title_style;
+    title_style.outline = ui::rgba(0.02f, 0.03f, 0.02f, 0.9f);
+    title_style.outline_px = 2.0f;
+    title_style.shadow = ui::rgba(0.0f, 0.0f, 0.0f, 0.55f);
+    title_style.shadow_x = 0.0f;
+    title_style.shadow_y = 3.0f;
+    ui.set_text_style(title_style);
     ui.text_center(static_cast<float>(ui.width()) * 0.5f, 70.0f, title, ui::rgba(0.92f, 0.88f, 0.55f), 1.85f);
     ui.text_center(static_cast<float>(ui.width()) * 0.5f, 140.0f, t(settings_, "subtitle"), ui::rgba(0.65f, 0.68f, 0.62f),
                    0.75f);
+    ui.reset_text_style();
 
     float y = 200.0f;
     auto row = [&](float height = 50.0f) {

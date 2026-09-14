@@ -28,6 +28,10 @@ public:
     const std::uint8_t* pixels() const { return pixels_.data(); }
     float white_u() const { return white_u_; }
     float white_v() const { return white_v_; }
+    // SDF calibration for effects: bake texels per requested pixel, and normalized
+    // distance units per bake texel. Text effects convert screen px through these.
+    float sdf_texels_per_px() const { return sdf_oversample_; }
+    float sdf_units_per_texel() const { return sdf_unit_; }
 
 private:
     std::unordered_map<std::uint32_t, Glyph> glyphs_;
@@ -38,6 +42,8 @@ private:
     float ascent_ = 0;
     float white_u_ = 0;
     float white_v_ = 0;
+    float sdf_oversample_ = 0;
+    float sdf_unit_ = 0;
 };
 
 } // namespace forge::ui
