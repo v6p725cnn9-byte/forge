@@ -128,7 +128,8 @@ void refresh_grounded_rotation(State& state, const Settings& settings, float dt)
                 refresh_target_from_actor(state);
                 return;
             }
-            const float target = state.has_input ? state.view_yaw : state.target_yaw;
+            const bool turn_in_place = std::abs(unwind_degrees(state.view_yaw-state.actor_yaw)) > 100.0f;
+            const float target = state.has_input || turn_in_place ? state.view_yaw : state.target_yaw;
             const float half = rotation_half_life(state.gait_amount, settings)
                 * (1.0f + (settings.min_half_life_scale - 1.0f)
                     * std::clamp(state.view_yaw_speed / settings.view_yaw_speed_ref, 0.0f, 1.0f));

@@ -71,7 +71,11 @@ std::vector<std::uint8_t> pack_input(const Input& input)
     if (input.interact) flags |= 2;
     if (input.place) flags |= 4;
     if (input.jump) flags |= 8;
+    if (input.walking) flags |= 16;
+    if (input.pulling) flags |= 128;
+    flags |= static_cast<std::uint8_t>(input.stance) << 5;
     w.u8(flags);
+    w.f32(input.pitch);
     w.u32(input.action_seq);
     w.u8(static_cast<std::uint8_t>(input.action));
     w.u8(input.argument);
@@ -92,7 +96,7 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
     std::uint8_t written = 0;
     for (std::uint8_t i = 0; i < count; ++i) {
         const auto& e = snapshot.entities[i];
-        const std::size_t extra = e.kind == Kind::Player ? 17 : e.kind == Kind::Marker ? 7
+        const std::size_t extra = e.kind == Kind::Player ? 56 : e.kind == Kind::Marker ? 7
             : e.kind == Kind::Label ? 1 + std::min(e.text.size(), std::size_t{48}) : 0;
         if (w.size() + 18 + extra + 13 + 4 * game::kItemCount + 7 > kMaxPacket) break;
         ++written;
@@ -105,6 +109,14 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
         if (e.kind == Kind::Player) {
             w.pad(e.name.c_str(), 16);
             w.u8(static_cast<std::uint8_t>(e.equipped));
+            const auto& m = e.motion;
+            w.f32(m.velocity.x); w.f32(m.velocity.y); w.f32(m.velocity.z);
+            w.f32(m.view_yaw); w.f32(m.pitch);
+            w.f32(m.left_ground); w.f32(m.right_ground);
+            w.f32(m.mantle); w.f32(m.impact);
+            w.u8(static_cast<std::uint8_t>(m.stance) | (m.grounded ? 4 : 0)
+                 | (m.mantling ? 8 : 0) | (m.interacting ? 16 : 0) | (m.pushing ? 32 : 0) | (m.pulling ? 64 : 0));
+            w.u8(m.stamina); w.u8(m.health);
         } else if (e.kind == Kind::Marker) {
             w.f32(e.size);
             w.u8(static_cast<std::uint8_t>(std::clamp(e.color.r, 0.0f, 1.0f) * 255.0f));
@@ -171,7 +183,8 @@ bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input)
     ByteReader r(data, size);
     std::uint8_t flags = 0, action = 0;
     if (!game_header(r, Packet::Input) || !r.u32(input.seq) || !r.f32(input.move_x) || !r.f32(input.move_z)
-        || !r.f32(input.yaw) || !r.u8(flags) || flags > 15 || !r.u32(input.action_seq) || !r.u8(action)
+        || !r.f32(input.yaw) || !r.u8(flags) || ((flags >> 5) & 3) > 2
+        || !r.f32(input.pitch) || std::abs(input.pitch) > 89.0f || !r.u32(input.action_seq) || !r.u8(action)
         || !r.u8(input.argument) || action > static_cast<std::uint8_t>(game::Action::Discard) || !r.done()
         || std::abs(input.move_x) > 1.0f || std::abs(input.move_z) > 1.0f)
         return false;
@@ -185,6 +198,9 @@ bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input)
     input.interact = (flags & 2) != 0;
     input.place = (flags & 4) != 0;
     input.jump = (flags & 8) != 0;
+    input.walking = (flags & 16) != 0;
+    input.pulling = (flags & 128) != 0;
+    input.stance = static_cast<Stance>((flags >> 5) & 3);
     return true;
 }
 
@@ -203,12 +219,27 @@ bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snaps
         if (!r.u8(kind) || !r.u8(ghost.id) || !r.f32(ghost.position.x) || !r.f32(ghost.position.y)
             || !r.f32(ghost.position.z) || !r.f32(ghost.yaw))
             return false;
-        if (kind < 1 || kind > static_cast<std::uint8_t>(Kind::Loot)) return false;
+        if (kind < 1 || kind > static_cast<std::uint8_t>(Kind::Crate)) return false;
         ghost.kind = static_cast<Kind>(kind);
         if (ghost.kind == Kind::Player) {
             std::uint8_t equipped = 0;
             if (!r.pad(ghost.name, 16) || !r.u8(equipped) || equipped >= game::kItemCount) return false;
             ghost.equipped = static_cast<game::Item>(equipped);
+            auto& m = ghost.motion;
+            std::uint8_t flags = 0;
+            if (!r.f32(m.velocity.x) || !r.f32(m.velocity.y) || !r.f32(m.velocity.z)
+                || !r.f32(m.view_yaw) || !r.f32(m.pitch) || !r.f32(m.left_ground) || !r.f32(m.right_ground)
+                || !r.f32(m.mantle) || !r.f32(m.impact) || !r.u8(flags) || flags > 127 || (flags & 3) > 2
+                || !r.u8(m.stamina) || !r.u8(m.health) || m.stamina > 100 || m.health > 100
+                || std::abs(m.pitch) > 89 || std::abs(m.left_ground) > .4f || std::abs(m.right_ground) > .4f
+                || m.mantle < 0 || m.mantle > 1 || m.impact < 0 || m.impact > 50
+                || glm::length(m.velocity) > 100) return false;
+            m.stance = static_cast<Stance>(flags & 3);
+            m.grounded = (flags & 4) != 0;
+            m.mantling = (flags & 8) != 0;
+            m.interacting = (flags & 16) != 0;
+            m.pushing = (flags & 32) != 0;
+            m.pulling = (flags & 64) != 0;
         } else if (ghost.kind == Kind::Marker) {
             std::uint8_t cr = 0, cg = 0, cb = 0;
             if (!r.f32(ghost.size) || !r.u8(cr) || !r.u8(cg) || !r.u8(cb)) return false;

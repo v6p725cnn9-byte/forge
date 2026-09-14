@@ -27,6 +27,8 @@ void Prediction::integrate(const Input& input, float dt)
         speed = game::kRunGaitSpeed;
         if (input.boost && game::sprint_cone(move, input.yaw)) speed = game::kSprintGaitSpeed;
     }
+    if (input.walking) speed = std::min(speed, game::kWalkGaitSpeed);
+    if (input.stance != Stance::Standing) speed = std::min(speed, stance_speed(input.stance));
     position_ += move * speed * dt;
     yaw_ = input.yaw;
 }

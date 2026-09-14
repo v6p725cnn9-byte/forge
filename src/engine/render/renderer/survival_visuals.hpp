@@ -5,6 +5,7 @@
 #include "engine/render/passes/opaque/pbr_scene.hpp"
 
 #include <SDL3/SDL.h>
+#include "engine/anim/locomotion/locomotion.hpp"
 #include <array>
 
 namespace forge::render {
@@ -37,6 +38,8 @@ private:
         float blend = 1;
         float action_left = 0;
         anim::Palette palette{};
+        anim::LocomotionState locomotion;
+        Motion motion;
     };
 
     void animate(PlayerVisual& player, float dt);
@@ -45,6 +48,7 @@ private:
     int head_joint_ = -1;
     glm::mat4 hip_bind_{1};
     glm::vec3 hip_origin_{0};
+    anim::Locomotion locomotion_;
     PbrScene character_;
     std::array<PbrScene, 3> trees_;
     PbrScene rock_;

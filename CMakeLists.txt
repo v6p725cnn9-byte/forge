@@ -102,7 +102,7 @@ add_library(forge_assets STATIC
 target_include_directories(forge_assets PUBLIC src)
 target_link_libraries(forge_assets PUBLIC glm::glm ktx_read PRIVATE forge_asset_deps)
 
-add_library(forge_anim STATIC src/engine/anim/skeleton/animator.cpp)
+add_library(forge_anim STATIC src/engine/anim/skeleton/animator.cpp src/engine/anim/locomotion/locomotion.cpp)
 target_include_directories(forge_anim PUBLIC src)
 target_link_libraries(forge_anim PUBLIC forge_assets glm::glm)
 
@@ -391,6 +391,11 @@ if(BUILD_TESTING)
     add_executable(survival_tests tests/survival_tests.cpp)
     target_link_libraries(survival_tests PRIVATE forge_game_net)
     add_test(NAME survival COMMAND survival_tests)
+
+    add_executable(locomotion_tests tests/locomotion_tests.cpp)
+    target_link_libraries(locomotion_tests PRIVATE forge_anim forge_physics)
+    add_test(NAME locomotion COMMAND locomotion_tests)
+    set_tests_properties(locomotion PROPERTIES ENVIRONMENT "FORGE_TEST_ROOT=${CMAKE_SOURCE_DIR}")
 
     add_executable(phys_tests tests/phys_tests.cpp)
     target_link_libraries(phys_tests PRIVATE forge_physics)

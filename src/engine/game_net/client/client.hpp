@@ -20,7 +20,7 @@ public:
     bool connect(const Address& server);
     void close();
     void send_input(float move_x, float move_z, float yaw, bool boost, bool interact = false, bool place = false,
-                    bool jump = false, float dt = 1.0f / kTickHz);
+                    bool jump = false, float dt = 1.0f / kTickHz, Stance stance = Stance::Standing, bool walking = false, float pitch = 0, bool pulling = false);
     void poll();
     const Snapshot& view() const { return view_; }
     glm::vec3 predicted_position() const { return prediction_.position(); }

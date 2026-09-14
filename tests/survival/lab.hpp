@@ -56,6 +56,8 @@ private:
     bool configured_ = false;
     float yaw_ = 0;
     bool boosting_ = false;
+    bool walking_ = false;
+    bool prone_ = false;
     std::string join_line_;
     SessionLaunch launch_{};
 };

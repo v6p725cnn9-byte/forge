@@ -53,7 +53,7 @@ void Client::close()
 }
 
 void Client::send_input(float move_x, float move_z, float yaw, bool boost, bool interact, bool place, bool jump,
-                        float dt)
+                        float dt, Stance stance, bool walking, float pitch, bool pulling)
 {
     if (!socket_.valid()) return;
     const auto now = std::chrono::steady_clock::now();
@@ -73,6 +73,10 @@ void Client::send_input(float move_x, float move_z, float yaw, bool boost, bool 
     input.interact = interact;
     input.place = place;
     input.jump = jump;
+    input.stance = stance;
+    input.walking = walking;
+    input.pulling = pulling;
+    input.pitch = std::clamp(pitch, -89.0f, 89.0f);
     if (!actions_.empty()) {
         const auto& request = actions_.front();
         input.action_seq = request.seq;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include "engine/core/locomotion/motion.hpp"
 #include <cstdint>
 #include <memory>
 
@@ -14,9 +15,14 @@ public:
     World& operator=(const World&) = delete;
 
     bool init();
-    int add_box(glm::vec3 center, glm::vec3 half_extents);
+    int add_box(glm::vec3 center, glm::vec3 half_extents, float pitch_degrees = 0);
+    int add_crate(glm::vec3 center);
+    glm::vec3 box_position(int box) const;
+    bool pull_box(int box, int character);
     void remove_box(int box);
     int spawn_character(glm::vec3 position, float radius, float half_height);
+    bool set_character_stance(int character, Stance stance);
+    Motion character_motion(int character) const;
     void remove_character(int character);
     bool spawn_vehicle(glm::vec3 position, float yaw_degrees = 0.0f);
     void set_character_enabled(bool enabled);

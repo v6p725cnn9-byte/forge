@@ -13,6 +13,9 @@ struct Input {
     bool boost = false;
     bool interact = false;
     bool place = false;
+    bool toggle_prone = false;
+    bool crouch = false;
+    bool pulling = false;
     glm::vec3 move{0};
 };
 

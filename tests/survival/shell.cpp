@@ -192,7 +192,8 @@ int run_game(const char* window_title)
                 if (mode == Mode::Play && event.key.key == SDLK_V) input.toggle_person = true;
                 if (mode == Mode::Play && !inventory_open && captured && !host.overlay().wants_keyboard()) {
                     if (event.key.key == SDLK_E) input.interact = true;
-                    if (event.key.key == SDLK_C) input.place = true;
+                    if (event.key.key == SDLK_B) input.place = true;
+                    if (event.key.key == SDLK_C) input.toggle_prone = true;
                 }
             }
             if (mode == Mode::Play && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
@@ -316,6 +317,8 @@ int run_game(const char* window_title)
                 static_cast<float>(keys[SDL_SCANCODE_E] - keys[SDL_SCANCODE_Q]),
                 static_cast<float>(keys[SDL_SCANCODE_W] - keys[SDL_SCANCODE_S]),
             };
+            input.pulling = keys[SDL_SCANCODE_Q];
+            input.crouch = keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_RCTRL];
             input.boost = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
             input.jump = keys[SDL_SCANCODE_SPACE];
         }

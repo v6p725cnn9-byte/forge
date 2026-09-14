@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/game/inventory/items.hpp"
+#include "engine/core/locomotion/motion.hpp"
 #include "engine/net/connection/connection.hpp"
 
 #include <glm/glm.hpp>
@@ -11,7 +12,7 @@
 namespace forge::net {
 
 constexpr std::uint32_t kMagic = 0x37475246u;
-constexpr std::uint8_t kVersion = 2;
+constexpr std::uint8_t kVersion = 3;
 constexpr std::size_t kEthernetMtu = 1500;
 constexpr std::size_t kIpv4UdpOverhead = 28; // IPv4 header + UDP header
 constexpr std::size_t kMaxDatagram = 1400;   // conservative application UDP payload
@@ -51,7 +52,7 @@ enum class Kind : std::uint8_t {
     Rock = 6,
     Campfire = 7,
     Extract = 8,
-    Stick = 9, Pebble, Flint, Fiber, IronOre, Furnace, Bench, Loot,
+    Stick = 9, Pebble, Flint, Fiber, IronOre, Furnace, Bench, Loot, Crate,
 };
 
 struct Input {
@@ -63,6 +64,10 @@ struct Input {
     bool interact = false;
     bool place = false;
     bool jump = false;
+    bool walking = false;
+    bool pulling = false;
+    Stance stance = Stance::Standing;
+    float pitch = 0;
     std::uint32_t action_seq = 0;
     game::Action action = game::Action::None;
     std::uint8_t argument = 0;
@@ -76,6 +81,7 @@ struct Ghost {
     float size = 1;
     glm::vec4 color{1};
     game::Item equipped = game::Item::None;
+    Motion motion;
     std::string name;
     std::string text;
 };

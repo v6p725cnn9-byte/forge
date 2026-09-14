@@ -1,4 +1,5 @@
 #include "lab.hpp"
+#include "engine/game/training/course.hpp"
 
 #include "engine/render/passes/opaque/pbr_pass.hpp"
 
@@ -115,7 +116,7 @@ bool SurvivalLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& rend
     debug_.survival = true;
     debug_.stream_radius = 70.0f;
     debug_.net_role = hosting_ ? "host" : "client";
-    debug_.help = "WASD | Space jump | E gather/hit/loot | extract: 4 ingots | C fire | Shift sprint";
+    debug_.help = "WASD | F walk | Shift sprint | Space jump/climb | Ctrl crouch | C crawl | B fire | E interact";
     std::snprintf(debug_.join_hint, sizeof(debug_.join_hint), "%s", join_line_.c_str());
     camera.position = {-8.0f, 4.0f, -6.0f};
     camera.look_at({0, 1, 4});
@@ -171,7 +172,9 @@ void SurvivalLab::sync_debug()
         debug_.world_label_pos[i] = pos;
         debug_.world_label_text[i] = text;
     };
+    for (const auto& label : game::course_labels()) push_label(label.position, label.text);
     for (const auto& ghost : snap.entities) {
+        if (ghost.kind == net::Kind::Crate) push_label(ghost.position+glm::vec3{0,1.0f,0}, "PUSH / HOLD Q + S TO PULL");
         if (ghost.kind == net::Kind::Player)
             push_label(visuals_.player_position(ghost.id, ghost.position) + glm::vec3{0, 1.15f, 0}, ghost.name.c_str());
         if (ghost.kind == net::Kind::Extract) push_label(ghost.position + glm::vec3{0, 3.2f, 0}, "EXTRACT");
@@ -205,7 +208,7 @@ void SurvivalLab::follow_camera(Camera& camera) const
     if (camera.is_first_person()) {
         // Eye ~1.6 m above the feet; the sim stores the pawn center 1 m above them.
         // Mouse yaw/pitch stay untouched so RMB look aims the view.
-        const glm::vec3 eye = position + glm::vec3{0.0f, 0.62f, 0.0f};
+        const glm::vec3 eye = position + glm::vec3{0.0f, stance_height(player->motion.stance) - 1.18f, 0.0f};
         glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
         if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
         camera.position = eye + glm::normalize(flat) * 0.2f;
@@ -220,6 +223,9 @@ void SurvivalLab::follow_camera(Camera& camera) const
 
 void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
 {
+    if (input.toggle_walk) walking_ = !walking_;
+    if (input.toggle_prone) prone_ = !prone_;
+    if (input.crouch) prone_ = false;
     if (input.toggle_person)
         camera.person = camera.is_first_person() ? CameraPerson::Third : CameraPerson::First;
     glm::vec3 walk{0};
@@ -233,7 +239,9 @@ void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
     } else {
         boosting_ = false;
     }
-    client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place, input.jump, dt);
+    client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place, input.jump, dt,
+                       prone_ ? Stance::Prone : input.crouch ? Stance::Crouched : Stance::Standing,
+                       walking_, camera.pitch, input.pulling);
     if (hosting_) server_.update(dt);
     client_.poll();
     visuals_.update(client_.view().entities.empty() ? client_.snapshot() : client_.view(), client_.player_id(), dt,
@@ -274,7 +282,9 @@ rhi::FrameResult SurvivalLab::draw(rhi::Host& host, [[maybe_unused]] render::Ren
     };
     draw_cube(cube_at({0.0f, -0.5f, 40.0f}, {180.0f, 1.0f, 200.0f}), {0.22f, 0.32f, 0.18f, 1.0f});
 
+    for (const auto& box : game::locomotion_course()) draw_cube(box.transform(), box.color);
     for (const auto& ghost : client_.snapshot().entities) {
+        if (ghost.kind == net::Kind::Crate) draw_cube(cube_at(ghost.position, glm::vec3{1.1f}), {.48f,.30f,.14f,1});
         if (ghost.kind == net::Kind::Extract) {
             draw_cube(cube_at(ghost.position + glm::vec3{0, 1.6f, 0}, {1.2f, 3.2f, 1.2f}), {0.25f, 0.75f, 0.95f, 1});
         }

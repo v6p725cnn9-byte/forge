@@ -2,6 +2,7 @@
 
 #include "engine/game_net/interest/interest.hpp"
 #include "engine/physics/locomotion/als.hpp"
+#include "engine/game/training/course.hpp"
 
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -59,6 +60,7 @@ void Server::ensure_physics()
     if (physics_ready_) return;
     if (!physics_.init()) return;
     physics_.add_box({0.0f, -0.5f, 40.0f}, {90.0f, 0.5f, 100.0f});
+    crate_ = physics_.add_crate({6.0f,.56f,-5.0f});
     physics_ready_ = true;
 }
 
@@ -77,6 +79,8 @@ void Server::sync_statics()
     if (static_synced_ && signature == static_signature_) return;
     for (int box : static_boxes_) physics_.remove_box(box);
     static_boxes_.clear();
+    for (const auto& box : game::locomotion_course())
+        static_boxes_.push_back(physics_.add_box(box.center, box.half, box.pitch));
     for (const auto& node : nodes) {
         if (!node.alive) continue;
         const float x = node.position.x;
@@ -240,6 +244,7 @@ void Server::poll()
         if (!unpack_input(payload.data(), payload.size(), input)) continue;
         if (!sequence_newer(input.seq, peer->last_seq)) continue;
         peer->last_seq = input.seq;
+        if (input.jump && !peer->input.jump) peer->pending_jump = true;
         peer->input = input;
         if (input.action != game::Action::None && sequence_newer(input.action_seq, peer->action_ack))
             peer->pending_action = input;
@@ -276,7 +281,10 @@ void Server::simulate(float dt)
         glm::vec3 move{peer.input.move_x, 0.0f, peer.input.move_z};
         const float length = glm::length(glm::vec2(move.x, move.z));
         if (length > 1.0f) move /= length;
-        bool want_boost = peer.input.boost;
+        physics_.set_character_stance(body, peer.input.stance);
+        const auto stance = physics_.character_motion(body).stance;
+        bool want_boost = peer.input.boost && stance == Stance::Standing
+            && game::sprint_cone(move, peer.input.yaw) && !peer.input.walking;
         if (sim_) {
             if (auto* pawn = sim_->pawn(peer.player_id)) {
                 if (want_boost && length > 0.05f) pawn->stamina = std::max(0.0f, pawn->stamina - 12.0f * dt);
@@ -285,19 +293,27 @@ void Server::simulate(float dt)
             }
         }
         if (length <= 0.05f) move = glm::vec3{0.0f};
-        float top = game::kRunGaitSpeed;
+        float top = peer.input.walking ? game::kWalkGaitSpeed : game::kRunGaitSpeed;
         if (length > 0.05f) {
             if (want_boost && game::sprint_cone(move, peer.input.yaw)) top = game::kSprintGaitSpeed;
             else if (pawn && pawn->stamina <= 1.0f) top = game::kWalkGaitSpeed;
         }
-        const bool vaulted = peer.input.jump && length > 0.3f && physics_.try_mantle(body, move);
-        physics_.set_character_input(body, move, peer.input.jump && !vaulted, top);
+        if (peer.input.pulling) top = std::min(top, 1.35f);
+        if (stance != Stance::Standing) top = stance_speed(stance);
+        if (pawn && pawn->hp < 35.0f) top = std::min(top, game::kWalkGaitSpeed);
+        const bool vaulted = peer.pending_jump && length > 0.3f && physics_.try_mantle(body, move);
+        physics_.set_character_input(body, move, peer.pending_jump && !vaulted, top);
+        peer.pending_jump = false;
     }
 
     if (physics_ready_) {
         constexpr int kSubsteps = 2;
         const float sub = dt / static_cast<float>(kSubsteps);
-        for (int i = 0; i < kSubsteps; ++i) physics_.tick(sub);
+        for (int i = 0; i < kSubsteps; ++i) {
+            for (const auto& peer : peers_)
+                if (peer.input.pulling && valid_player(peer.player_id)) physics_.pull_box(crate_, bodies_[peer.player_id]);
+            physics_.tick(sub);
+        }
     }
     for (auto& peer : peers_) {
         if (!valid_player(peer.player_id)) continue;
@@ -305,7 +321,26 @@ void Server::simulate(float dt)
         if (!player) continue;
         const int body = bodies_[static_cast<std::size_t>(peer.player_id)];
         if (body >= 0 && physics_ready_) {
-            player->position = physics_.character_position(body) + glm::vec3{0.0f, kCenterOffset, 0.0f};
+            player->motion = physics_.character_motion(body);
+            player->motion.pitch = peer.input.pitch;
+            player->motion.interacting = peer.pending_interact;
+            const glm::vec3 toward = physics_.box_position(crate_)-physics_.character_position(body);
+            const glm::vec2 toward_xz{toward.x,toward.z};
+            const glm::vec2 wish{peer.input.move_x,peer.input.move_z};
+            const float view_angle=glm::radians(peer.input.yaw);
+            const bool facing=glm::dot(toward_xz,glm::vec2{std::sin(view_angle),std::cos(view_angle)})>.25f;
+            const bool near=glm::length(toward_xz)<1.35f && std::abs(toward.y)<1.0f;
+            player->motion.pushing=near && facing && glm::dot(toward_xz,wish)>.1f;
+            player->motion.pulling=near && facing && peer.input.pulling;
+            if (player->motion.stance != Stance::Standing || !player->motion.grounded) {
+                player->motion.pushing=false; player->motion.pulling=false;
+            }
+            if (const auto* pawn = sim_ ? sim_->pawn(peer.player_id) : nullptr) {
+                player->motion.stamina = static_cast<std::uint8_t>(std::clamp(pawn->stamina, 0.0f, 100.0f));
+                player->motion.health = static_cast<std::uint8_t>(std::clamp(pawn->hp, 0.0f, 100.0f));
+            }
+            player->position = physics_.character_position(body)
+                + glm::vec3{0.0f, 1.0f - stance_height(player->motion.stance) * .5f, 0.0f};
             player->yaw = physics_.character_yaw(body);
             const glm::vec3 move{peer.input.move_x, 0.0f, peer.input.move_z};
             if (!physics_.character_supported(body) && glm::length(glm::vec2(move.x, move.z)) > 0.3f)
@@ -368,6 +403,9 @@ void Server::broadcast()
         snapshot.ack = peer.last_seq;
         snapshot.entities = collect_stream(*world_, player->position, stream_radius_, peer.player_id);
         if (sim_) {
+            Ghost crate;
+            crate.id=255; crate.kind=Kind::Crate; crate.position=physics_.box_position(crate_);
+            if (xz_distance(player->position,crate.position)<stream_radius_) snapshot.entities.push_back(crate);
             for (int i = 0; i < static_cast<int>(sim_->nodes().size()); ++i) {
                 const auto& node = sim_->nodes()[static_cast<std::size_t>(i)];
                 if (!node.alive) continue;

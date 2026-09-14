@@ -38,6 +38,7 @@ private:
         std::uint32_t last_seq = 0;
         bool pending_interact = false;
         bool pending_place = false;
+        bool pending_jump = false;
         std::uint32_t action_ack = 0;
         Input pending_action{};
         std::chrono::steady_clock::time_point last_recv{};
@@ -62,6 +63,7 @@ private:
     float accumulator_ = 0;
     phys::World physics_;
     bool physics_ready_ = false;
+    int crate_ = -1;
     std::array<int, game::kMaxPlayers> bodies_ = [] {
         std::array<int, game::kMaxPlayers> ids{};
         ids.fill(-1);

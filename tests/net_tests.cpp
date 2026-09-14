@@ -102,6 +102,31 @@ int main()
     input.jump = true;
     const auto jump_bytes = pack_input(input);
     check(unpack_input(jump_bytes.data(), jump_bytes.size(), input_out) && input_out.jump, "jump flag round-trips");
+    input.stance = forge::Stance::Prone;
+    input.walking = true; input.pulling = true; input.pitch = -42;
+    const auto stance_bytes = pack_input(input);
+    check(unpack_input(stance_bytes.data(), stance_bytes.size(), input_out) && input_out.stance == forge::Stance::Prone
+          && input_out.walking && input_out.pulling && input_out.pitch == -42, "stance and look input round-trip");
+    Snapshot motion_snapshot;
+    Ghost animated; animated.id = 0;
+    animated.motion.stance = forge::Stance::Crouched;
+    animated.motion.velocity = {2,-4,1}; animated.motion.grounded = false;
+    animated.motion.mantling = true; animated.motion.mantle = .4f;
+    animated.motion.left_ground = .2f; animated.motion.right_ground = -.3f;
+    animated.motion.pitch = 30; animated.motion.impact = 6; animated.motion.health = 25;
+    animated.motion.stamina = 17; animated.motion.pushing = true; animated.motion.pulling = true;
+    motion_snapshot.entities.push_back(animated);
+    auto motion_bytes = pack_snapshot(motion_snapshot);
+    Snapshot decoded_motion;
+    check(unpack_snapshot(motion_bytes.data(), motion_bytes.size(), decoded_motion), "motion snapshot decode");
+    const auto& motion = decoded_motion.entities[0].motion;
+    check(motion.stance == forge::Stance::Crouched && motion.velocity.y == -4 && !motion.grounded
+          && motion.mantle == .4f && motion.left_ground == .2f && motion.right_ground == -.3f
+          && motion.health == 25 && motion.stamina == 17 && motion.pushing && motion.pulling,
+          "authoritative animation state round-trip");
+    motion_snapshot.entities[0].motion.mantle = 2;
+    motion_bytes = pack_snapshot(motion_snapshot);
+    check(!unpack_snapshot(motion_bytes.data(), motion_bytes.size(), decoded_motion), "invalid mantle progress rejected");
     std::uint32_t nonce = 0;
     const auto ping_bytes = pack_ping(42);
     check(unpack_ping(ping_bytes.data(), ping_bytes.size(), nonce) && nonce == 42, "ping round-trip");
@@ -120,7 +145,7 @@ int main()
     malformed = pack_input(input);
     check(!unpack_input(malformed.data(), malformed.size(), input_out), "unbounded movement rejected");
     malformed = input_bytes;
-    malformed[24] = 128;
+    malformed[24] = 96;
     check(!unpack_input(malformed.data(), malformed.size(), input_out), "unknown input flags rejected");
     malformed = pack_hello();
     malformed.push_back(0);

@@ -37,6 +37,7 @@ std::vector<Ghost> collect_stream(const game::Actors& world, const glm::vec3& ob
         ghost.position = player->position;
         ghost.yaw = player->yaw;
         ghost.name = player->name;
+        ghost.motion = player->motion;
         const float distance = (id == observer_id) ? 0.0f : xz_distance(observer, player->position);
         push(distance, std::move(ghost));
     }

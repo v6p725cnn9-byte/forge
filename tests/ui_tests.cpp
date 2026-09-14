@@ -1,4 +1,5 @@
 #include "engine/frontend/menu/background.hpp"
+#include "engine/platform/window/host.hpp"
 #include "engine/frontend/menu/menu.hpp"
 #include "engine/frontend/inventory/inventory_menu.hpp"
 #include "engine/frontend/menu/menu_scene.hpp"

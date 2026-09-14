@@ -13,7 +13,7 @@
 namespace forge::render {
 namespace {
 
-constexpr float kBlendSeconds = 0.18f;
+
 
 glm::mat4 grounded(const PbrScene& model, float height)
 {
@@ -196,6 +196,7 @@ bool SurvivalVisuals::create(SDL_GPUDevice* device, Renderer& renderer)
     double_sided_ = make_pbr_pipeline(device, renderer, true);
     skinned_ = make_pbr_skinned_pipeline(device, renderer, true);
     if (!pbr_ || !double_sided_ || !skinned_) return false;
+    locomotion_.bind(character, glm::length(glm::vec3(character_transform_[0])));
     SDL_Log("Survival assets ready: ALS mannequin (%zu skins, %zu clips), trees, campfire and rock",
             character.skins.size(), character.animations.size());
     return true;
@@ -212,58 +213,7 @@ void SurvivalVisuals::remove_root_motion(anim::Palette& palette) const
 
 void SurvivalVisuals::animate(PlayerVisual& player, float dt)
 {
-    const auto& scene = character_.cpu();
-    if (scene.skins.empty()) return;
-    if (scene.animations.empty()) {
-        anim::evaluate(scene, 0, -1, 0.0f, player.palette);
-        remove_root_motion(player.palette);
-        return;
-    }
-    const int next = player.action_left > 0 ? interact_
-        : (player.speed > 3.85f ? run_ : (player.speed > 0.50f ? walk_ : idle_));
-    if (next < 0) {
-        // Until an idle clip is supplied, hold the first authored walking pose.
-        anim::evaluate(scene, 0, walk_, 0.0f, player.palette);
-        remove_root_motion(player.palette);
-        player.clip = -1;
-        player.time = 0;
-        return;
-    }
-    if (next != player.clip) {
-        player.previous_clip = player.clip;
-        player.previous_time = player.time;
-        player.clip = next;
-        player.time = 0;
-        player.blend = player.previous_clip < 0 ? 1.0f : 0.0f;
-    }
-    // ALS-style stride matching: run the cycle faster/slower so the feet
-    // land where the capsule travels instead of sliding.
-    float stride = 0.0f;
-    if (next == walk_) stride = walk_stride_;
-    else if (next == run_) stride = run_stride_;
-    float rate = 1.0f;
-    if (stride > 0.2f && player.speed > 0.3f) rate = std::clamp(player.speed / stride, 0.5f, 2.5f);
-    player.time += dt * rate;
-    player.previous_time += dt * rate;
-    player.blend = std::min(1.0f, player.blend + dt / kBlendSeconds);
-    std::vector<glm::vec3> translation, scale;
-    std::vector<glm::quat> rotation;
-    anim::sample_clip(scene, player.clip, player.time, translation, rotation, scale);
-    if (player.blend < 1.0f) {
-        std::vector<glm::vec3> old_translation, old_scale;
-        std::vector<glm::quat> old_rotation;
-        anim::sample_clip(scene, player.previous_clip, player.previous_time, old_translation, old_rotation, old_scale);
-        const float blend = player.blend * player.blend * (3.0f - 2.0f * player.blend);
-        for (std::size_t i = 0; i < translation.size(); ++i) {
-            translation[i] = glm::mix(old_translation[i], translation[i], blend);
-            scale[i] = glm::mix(old_scale[i], scale[i], blend);
-            if (glm::dot(old_rotation[i], rotation[i]) < 0) rotation[i] = -rotation[i];
-            rotation[i] = glm::normalize(glm::slerp(old_rotation[i], rotation[i], blend));
-        }
-    }
-    std::vector<glm::mat4> globals;
-    anim::compute_globals(scene, translation, rotation, scale, globals);
-    anim::compute_palette(scene, 0, globals, player.palette);
+    locomotion_.evaluate(character_.cpu(), player.locomotion, player.motion, player.yaw, dt, player.palette);
     remove_root_motion(player.palette);
 }
 
@@ -306,6 +256,9 @@ void SurvivalVisuals::update(const net::Snapshot& snapshot, std::uint8_t local_p
             player.action_left = character_.cpu().animations[static_cast<std::size_t>(interact_)].duration;
             if (player.clip == interact_) player.time = 0;
         }
+        player.motion = ghost.motion;
+        player.speed = glm::length(glm::vec2(ghost.motion.velocity.x, ghost.motion.velocity.z));
+        if (interact && ghost.id == local_player) player.motion.interacting = true;
         animate(player, dt);
     }
     for (std::size_t i = 0; i < players_.size(); ++i) if (!visible[i]) players_[i].active = false;
@@ -338,8 +291,7 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
             // The simulation stores the pawn center one metre above its feet.
             const auto model = glm::translate(glm::mat4(1), player.position - glm::vec3{0, 1, 0})
                 * glm::rotate(glm::mat4(1), glm::radians(player.yaw), glm::vec3{0, 1, 0})
-                * glm::rotate(glm::mat4(1), player.lean.x, glm::vec3{1, 0, 0})
-                * glm::rotate(glm::mat4(1), player.lean.y, glm::vec3{0, 0, 1}) * character_transform_;
+                * character_transform_;
             const CameraUniforms camera{view_projection, model};
             SDL_PushGPUVertexUniformData(command, 0, &camera, sizeof(camera));
             if (character.skins.empty()) {

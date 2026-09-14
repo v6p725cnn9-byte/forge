@@ -46,8 +46,8 @@ inline const char* tr(std::string_view language, std::string_view key)
     if (key == "hud_extracted") return ru ? "ЭВАКУАЦИЯ" : "EXTRACTED";
     if (key == "hud_failed") return ru ? "ПРОВАЛ" : "FAILED";
     if (key == "hud_drop") return ru ? "высадка" : "drop";
-    if (key == "hud_help") return ru ? "E добыча/удар/лут   эвакуация: 4 слитка   C костёр (горит 80 с)"
-                                     : "E gather/hit/loot   extract: 4 ingots   C campfire (burns 80s)";
+    if (key == "hud_help") return ru ? "F шаг  Shift бег  Ctrl присед  C ползти  Space прыжок  B костёр  E действие"
+                                     : "F walk  Shift sprint  Ctrl crouch  C crawl  Space jump  B fire  E interact";
     if (key == "wood") return ru ? "Дерево" : "Wood";
     if (key == "stone") return ru ? "Камень" : "Stone";
     if (key == "cold") return ru ? "Холод" : "Cold";

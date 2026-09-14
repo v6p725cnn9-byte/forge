@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include "engine/core/locomotion/motion.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -17,6 +18,7 @@ struct Player {
     glm::vec3 position{0, 1, 0};
     glm::vec3 home{0, 1, 0};
     float yaw = 0;
+    Motion motion;
     std::string name = "Player";
 };
 
