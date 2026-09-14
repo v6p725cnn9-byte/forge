@@ -1,5 +1,6 @@
 #include "engine/app/background.hpp"
 #include "engine/app/menu.hpp"
+#include "engine/app/inventory_menu.hpp"
 #include "engine/app/menu_scene.hpp"
 #include "engine/assets/scene.hpp"
 #include "engine/ui/font.hpp"
@@ -105,6 +106,77 @@ int main()
     check(styled.text_style().outline_px == 0.0f, "Style resets to plain");
     std::cout << "UI text effect checks passed\n";
 
+    forge::ui::VCursor column({10, 20, 300, 400}, 8);
+    const auto first = column.next(40);
+    const auto second = column.next(40);
+    check(first.x == 10 && first.y == 20 && first.w == 300 && first.h == 40, "Column stacks full-width rows");
+    check(second.y == 68 && column.remaining() == 304, "Column advances with gaps");
+    forge::ui::HCursor row({0, 0, 200, 30}, 10);
+    const auto left = row.next(60);
+    const auto right = row.next(60);
+    check(left.x == 0 && right.x == 70 && row.remaining() == 60, "Row lays out left to right");
+
+    check(forge::ui::clip_runs(10, {}).size() == 1, "No marks produce one neutral run");
+    const std::vector<forge::ui::ClipMark> marks{{4, {0, 0, 50, 50}, true}, {8, {}, false}};
+    const auto runs = forge::ui::clip_runs(10, marks);
+    check(runs.size() == 3, "Begin/end marks split three runs");
+    check(!runs[0].clipped && runs[0].start == 0 && runs[0].end == 4, "Lead run stays unclipped");
+    check(runs[1].clipped && runs[1].start == 4 && runs[1].end == 8, "Middle run carries the clip");
+    check(!runs[2].clipped && runs[2].start == 8 && runs[2].end == 10, "Trailing run restores neutral");
+    std::cout << "UI layout and clip checks passed\n";
+
+    forge::ui::Ui widgets;
+    widgets.begin(640, 480, 0, 0, false);
+    forge::ui::BoxStyle panel;
+    panel.fill = forge::ui::rgba(0.1f, 0.1f, 0.1f, 1);
+    panel.radius = 8;
+    panel.border = forge::ui::rgba(0, 0, 0, 1);
+    panel.border_px = 1;
+    panel.shadow = forge::ui::rgba(0, 0, 0, 0.5f);
+    widgets.box({10, 10, 100, 40}, panel);
+    widgets.progress({10, 60, 100, 12}, 0.5f);
+    widgets.separator(10, 110, 80);
+    std::cout << "UI shape widgets emit headless\n";
+
+    const char* items[] = {"One", "Two", "Three"};
+    int selected = 0;
+    widgets.begin(640, 480, 250, 25, false, true, true);
+    check(widgets.tabs(21, {100, 10, 300, 30}, items, 3, &selected), "Tab click selects");
+    check(selected == 1, "Second tab becomes selected");
+
+    int picked = 0;
+    widgets.begin(640, 480, 150, 115, false, true, true);
+    check(!widgets.dropdown(22, {100, 100, 200, 30}, items, 3, &picked), "First click opens the list");
+    widgets.begin(640, 480, 150, 175, false, true, true);
+    check(widgets.dropdown(22, {100, 100, 200, 30}, items, 3, &picked), "List click picks");
+    check(picked == 1, "Second item becomes picked");
+
+    float scroll = 0;
+    widgets.begin(640, 480, 185, 25, true);
+    widgets.scrollbox(23, {100, 10, 100, 100}, 400, &scroll);
+    widgets.begin(640, 480, 185, 80, true);
+    check(widgets.scrollbox(23, {100, 10, 100, 100}, 400, &scroll), "Thumb drag scrolls");
+    check(scroll > 0, "Scroll offset advances");
+    std::cout << "UI widget checks passed\n";
+
+    forge::ui::Ui glass;
+    check(!glass.wants_backdrop(), "No backdrop without glass panels");
+    forge::ui::BoxStyle frosted;
+    frosted.fill = forge::ui::rgba(0.05f, 0.07f, 0.06f, 0.55f);
+    frosted.radius = 12.0f;
+    frosted.backdrop_px = 14.0f;
+    glass.begin(640, 480, 0, 0, false);
+    check(!glass.wants_backdrop(), "Begin clears the backdrop flag");
+    glass.box({10, 10, 200, 100}, frosted);
+    check(glass.wants_backdrop(), "Glass panel requests a backdrop blur");
+    forge::ui::BoxStyle solid;
+    solid.fill = forge::ui::rgba(0.1f, 0.1f, 0.1f, 1);
+    solid.radius = 8.0f;
+    glass.begin(640, 480, 0, 0, false);
+    glass.box({10, 10, 200, 100}, solid);
+    check(!glass.wants_backdrop(), "Opaque panels skip the backdrop blur");
+    std::cout << "UI backdrop checks passed\n";
+
     forge::ui::Ui input_ui;
     input_ui.begin(1280, 720, 20, 20, false, true, true);
     check(input_ui.button(1, {10, 10, 100, 40}, ""), "press and release between frames must register");
@@ -120,6 +192,22 @@ int main()
           "settings click opens a subpage");
     input_ui.begin(1280, 720, 640, 411, false, true, true);
     check(menu.draw(input_ui).command == forge::app::MenuCommand::Quit, "menu quit click selects quit");
+
+    forge::app::InventoryMenu backpack;
+    forge::net::Snapshot bag_snapshot;
+    bag_snapshot.inventory.add(forge::game::Item::Fiber,8);
+    backpack.reset(1);
+    input_ui.begin(1280,720,900,450,false);
+    check(backpack.draw(input_ui,bag_snapshot,false,"ru").action==forge::game::Action::None,
+          "crafting renders without inventing an action");
+    // Right pane's Craft button follows the rope's single ingredient and station rows.
+    input_ui.begin(1280,720,850,420,false,true,true);
+    const auto craft_click=backpack.draw(input_ui,bag_snapshot,false,"ru");
+    check(craft_click.action==forge::game::Action::Craft && craft_click.argument==0,
+          "craft click emits a server request for the selected recipe");
+    input_ui.begin(1280,720,850,420,false,true,true);
+    check(backpack.draw(input_ui,bag_snapshot,true,"en").action==forge::game::Action::None,
+          "pending server action disables duplicate clicks");
 
     using forge::app::cover_crop;
     auto crop = cover_crop(1671, 941, 1671, 941);

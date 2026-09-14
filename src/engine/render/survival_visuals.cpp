@@ -20,13 +20,13 @@ glm::mat4 grounded(const PbrScene& model, float height)
     return glm::scale(glm::mat4(1), glm::vec3{scale}) * glm::translate(glm::mat4(1), -base);
 }
 
-bool load_prop(PbrScene& gpu, SDL_GPUDevice* device, const std::filesystem::path& path, std::string& error)
+bool load_prop(PbrScene& gpu, SDL_GPUDevice* device, const std::filesystem::path& path, std::string& error, std::shared_ptr<Ibl> lighting)
 {
     assets::Scene scene;
     if (!assets::load_gltf(path, scene, error)) return false;
     // The older Nature Kit exports wood and foliage with metallic=1.
     for (auto& material : scene.materials) material.metallic = 0;
-    return gpu.ingest(device, std::move(scene), path.stem().string(), error);
+    return gpu.ingest(device, std::move(scene), path.stem().string(), error, std::move(lighting));
 }
 
 assets::Scene fire_billboard()
@@ -134,17 +134,27 @@ bool SurvivalVisuals::create(rhi::Host& host)
 
     const std::array<const char*, 3> trees{"tree_default.glb", "tree_pineTallA.glb", "tree_pineRoundC.glb"};
     for (std::size_t i = 0; i < trees.size(); ++i) {
-        if (!load_prop(trees_[i], host.device(), models / "Nature" / trees[i], error)) {
+        if (!load_prop(trees_[i], host.device(), models / "Nature" / trees[i], error, astronaut_.lighting())) {
             SDL_Log("Tree load failed: %s", error.c_str());
             return false;
         }
         tree_transforms_[i] = grounded(trees_[i], i == 1 ? 6.2f : 4.8f);
     }
-    if (!load_prop(rock_, host.device(), models / "Nature/rock_largeA.glb", error)
-        || !load_prop(campfire_, host.device(), models / "Campfire/campfire-pit.glb", error)
-        || !flame_.ingest(host.device(), fire_billboard(), "Kenney fire particle", error)) {
+    if (!load_prop(rock_, host.device(), models / "Nature/rock_largeA.glb", error, astronaut_.lighting())
+        || !load_prop(campfire_, host.device(), models / "Campfire/campfire-pit.glb", error, astronaut_.lighting())
+        || !flame_.ingest(host.device(), fire_billboard(), "Kenney fire particle", error, astronaut_.lighting())) {
         SDL_Log("Survival prop load failed: %s", error.c_str());
         return false;
+    }
+    const std::array<const char*,10> supplies{{"tool-axe", "tool-pickaxe", "tool-axe-upgraded", "tool-pickaxe-upgraded",
+        "resource-wood", "resource-stone", "resource-stone-large", "grass", "workbench", "barrel-open"}};
+    const std::array<float,10> heights{{.75f,.85f,.75f,.85f,.22f,.20f,1.15f,.45f,1.0f,1.15f}};
+    for (std::size_t i = 0; i < supplies.size(); ++i) {
+        if (!load_prop(supplies_[i],host.device(),models / "SurvivalKit" / (std::string(supplies[i])+".glb"),error,astronaut_.lighting())) {
+            SDL_Log("Supply model failed: %s",error.c_str());
+            return false;
+        }
+        supply_transforms_[i] = grounded(supplies_[i],heights[i]);
     }
     rock_transform_ = grounded(rock_, 0.75f);
     fire_transform_ = grounded(campfire_, 0.42f);
@@ -294,6 +304,21 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
                 astronaut_.draw_skinned(command, pass, skinned_, player.palette, debug, camera_position);
             }
             triangles_ += astronaut_.triangle_count;
+            int tool = -1;
+            switch (ghost.equipped) {
+            case game::Item::StoneAxe: tool = 0; break;
+            case game::Item::StonePickaxe: tool = 1; break;
+            case game::Item::IronAxe: tool = 2; break;
+            case game::Item::IronPickaxe: tool = 3; break;
+            default: break;
+            }
+            if (tool >= 0) {
+                const auto turn = glm::rotate(glm::mat4(1),glm::radians(player.yaw),glm::vec3{0,1,0});
+                const auto grip = glm::translate(glm::mat4(1),player.position) * turn
+                    * glm::translate(glm::mat4(1),glm::vec3{.38f,-.15f,headless ? .75f : .28f});
+                draw(supplies_[tool],grip * glm::rotate(glm::mat4(1),glm::radians(-20.0f),glm::vec3{1,0,0})
+                    * supply_transforms_[tool]);
+            }
         } else if (ghost.kind == net::Kind::Tree) {
             const auto variant = static_cast<std::size_t>(ghost.id % trees_.size());
             const float scale = 0.88f + static_cast<float>(ghost.id % 5) * 0.055f;
@@ -302,6 +327,20 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
         } else if (ghost.kind == net::Kind::Rock) {
             draw(rock_, position * glm::rotate(glm::mat4(1), glm::radians(ghost.id * 47.0f), glm::vec3{0, 1, 0})
                 * rock_transform_, {0.62f, 0.57f, 0.50f, 1});
+        } else if (ghost.kind >= net::Kind::Stick && ghost.kind <= net::Kind::Bench) {
+            int prop = 5;
+            glm::vec4 tint{1};
+            switch (ghost.kind) {
+            case net::Kind::Stick: prop = 4; break;
+            case net::Kind::Pebble: prop = 5; break;
+            case net::Kind::Flint: prop = 5; tint = {.36f,.45f,.56f,1}; break;
+            case net::Kind::Fiber: prop = 7; break;
+            case net::Kind::IronOre: prop = 6; tint = {.65f,.31f,.17f,1}; break;
+            case net::Kind::Bench: prop = 8; break;
+            case net::Kind::Furnace: prop = 9; tint = {.32f,.3f,.27f,1}; break;
+            default: break;
+            }
+            draw(supplies_[prop],position * supply_transforms_[prop],tint);
         } else if (ghost.kind == net::Kind::Campfire) {
             draw(campfire_, position * fire_transform_);
             const auto to_camera = camera_position - ghost.position;
@@ -321,6 +360,7 @@ void SurvivalVisuals::destroy(rhi::Host& host)
     rock_.destroy(host.device());
     campfire_.destroy(host.device());
     flame_.destroy(host.device());
+    for (auto& supply : supplies_) supply.destroy(host.device());
     if (pbr_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pbr_);
     if (double_sided_) SDL_ReleaseGPUGraphicsPipeline(host.device(), double_sided_);
     if (skinned_) SDL_ReleaseGPUGraphicsPipeline(host.device(), skinned_);

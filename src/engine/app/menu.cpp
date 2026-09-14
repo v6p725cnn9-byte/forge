@@ -178,28 +178,80 @@ MenuResult Menu::draw(ui::Ui& ui)
     return result;
 }
 
+namespace {
+
+void stat_bar(ui::Ui& ui, float x, float y, float w, const char* label, float frac, ui::Color color)
+{
+    ui.text(x, y + 5.0f, label, color, 0.42f);
+    const float bx = x + 108.0f;
+    const float bw = w - 108.0f;
+    const float bh = 14.0f;
+    const float by = y + 5.0f;
+    ui::BoxStyle bg;
+    bg.fill = ui::rgba(0.11f, 0.14f, 0.16f, 0.95f);
+    bg.border = ui::rgba(0.29f, 0.36f, 0.40f);
+    bg.border_px = 1.0f;
+    ui.box({bx, by, bw, bh}, bg);
+    const float fw = (bw - 4.0f) * std::clamp(frac, 0.0f, 1.0f);
+    if (fw > 0.5f) ui.quad({bx + 2.0f, by + 2.0f, fw, bh - 4.0f}, color);
+}
+
+void corner_ticks(ui::Ui& ui, float x, float y, float w, float h, ui::Color color)
+{
+    const float arm = 8.0f;
+    const float t = 2.0f;
+    ui.quad({x - 1, y - 1, arm, t}, color);
+    ui.quad({x - 1, y - 1, t, arm}, color);
+    ui.quad({x + w - arm + 1, y - 1, arm, t}, color);
+    ui.quad({x + w - t + 1, y - 1, t, arm}, color);
+    ui.quad({x - 1, y + h - t + 1, arm, t}, color);
+    ui.quad({x - 1, y + h - arm + 1, t, arm}, color);
+    ui.quad({x + w - arm + 1, y + h - t + 1, arm, t}, color);
+    ui.quad({x + w - t + 1, y + h - arm + 1, t, arm}, color);
+}
+
+} // namespace
+
 void draw_game_hud(ui::Ui& ui, const render::DebugState& debug)
 {
-    const char* lang = debug.language ? debug.language : "ru";
     char line[160];
-    const float x = 24;
-    float y = static_cast<float>(ui.height()) - 150;
-    ui.quad({12, y - 12, 520, 140}, ui::rgba(0.05f, 0.07f, 0.06f, 0.72f));
-    std::snprintf(line, sizeof(line), "%s %.0f    %s %.0f", tr(lang, "hp"), debug.hp, tr(lang, "cold"), debug.cold);
-    ui.text(x, y, line, ui::rgba(0.92f, 0.93f, 0.9f), 0.62f);
-    y += 32;
-    std::snprintf(line, sizeof(line), "%s %u    %s %u", tr(lang, "wood"), debug.wood, tr(lang, "stone"), debug.stone);
-    ui.text(x, y, line, ui::rgba(0.92f, 0.93f, 0.9f), 0.62f);
-    y += 32;
-    const char* phase = debug.phase == 1 ? "hud_extracted" : (debug.phase == 2 ? "hud_failed" : "hud_drop");
-    std::snprintf(line, sizeof(line), "%s  %u s  |  %s  |  %s", tr(lang, "hud_session"), debug.time_left,
-                  debug.night ? tr(lang, "hud_night") : tr(lang, "hud_day"), tr(lang, phase));
-    ui.text(x, y, line, ui::rgba(0.85f, 0.86f, 0.8f), 0.58f);
-    y += 30;
-    if (debug.join_hint[0] && debug.net_role && std::string_view(debug.net_role) == "host")
-        ui.text(x, y, debug.join_hint, ui::rgba(0.7f, 0.85f, 0.7f), 0.52f);
-    else
-        ui.text(x, y, tr(lang, "hud_help"), ui::rgba(0.6f, 0.62f, 0.58f), 0.5f);
+    constexpr float panel_w = 320.0f;
+    constexpr float panel_h = 156.0f;
+    const float px = 12.0f;
+    const float py = static_cast<float>(ui.height()) - panel_h - 12.0f;
+    ui::BoxStyle glass;
+    glass.fill = ui::rgba(0.07f, 0.09f, 0.11f, 0.60f);
+    glass.radius = 3.0f;
+    glass.border = ui::rgba(0.29f, 0.36f, 0.40f);
+    glass.border_px = 1.0f;
+    glass.backdrop_px = 12.0f;
+    ui.box({px, py, panel_w, panel_h}, glass);
+    corner_ticks(ui, px, py, panel_w, panel_h, ui::rgba(0.55f, 0.64f, 0.69f));
+
+    const float x = px + 8.0f;
+    const float w = panel_w - 16.0f;
+    float y = py + 8.0f;
+    const ui::Color o2{0.36f, 0.78f, 0.91f, 1.0f};
+    const ui::Color stam{0.91f, 0.58f, 0.29f, 1.0f};
+    const ui::Color rad{0.60f, 0.80f, 0.20f, 1.0f};
+    const ui::Color temp{0.35f, 0.63f, 0.90f, 1.0f};
+    const ui::Color hp{0.90f, 0.30f, 0.32f, 1.0f};
+    std::snprintf(line, sizeof(line), "OXYGEN %.0f%%", debug.o2);
+    stat_bar(ui, x, y, w, line, debug.o2 / 100.0f, o2);
+    y += 28.0f;
+    std::snprintf(line, sizeof(line), "STAMINA %.0f%%", debug.stamina);
+    stat_bar(ui, x, y, w, line, debug.stamina / 100.0f, stam);
+    y += 28.0f;
+    std::snprintf(line, sizeof(line), "RADIATION %.0f%%", debug.radiation);
+    stat_bar(ui, x, y, w, line, debug.radiation / 100.0f, rad);
+    y += 28.0f;
+    // Body-temperature readout derived from cold exposure: 36.6 healthy .. 20.0 freezing.
+    const float temp_c = 36.6f - debug.cold * 0.166f;
+    std::snprintf(line, sizeof(line), "TEMPERATURE %.1f", temp_c);
+    stat_bar(ui, x, y, w, line, 1.0f - debug.cold / 100.0f, temp);
+    y += 28.0f;
+    std::snprintf(line, sizeof(line), "HEALTH %.0f%%", debug.hp);
+    stat_bar(ui, x, y, w, line, debug.hp / 100.0f, hp);
 }
 
 void draw_world_captions(ui::Ui& ui, const Camera& camera, const render::DebugState& debug, int width, int height)

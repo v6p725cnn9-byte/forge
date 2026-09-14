@@ -1,0 +1,5 @@
+Kenney Survival Kit 2.0 — CC0
+https://kenney.nl/assets/survival-kit
+Downloaded 2026-09-14; selected original GLB models and palette.
+Archive SHA256: c3586341b5932c87eb43d75d915434f47daed168b17ed36a03e8ca9977c7443e
+barrel-open is used as the field furnace; resource-wood as gathered sticks.

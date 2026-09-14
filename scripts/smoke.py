@@ -17,7 +17,7 @@ def main():
     executable = args.executable.resolve()
     environment = dict(os.environ, FORGE_SMOKE="90", FORGE_SMOKE_RESIZE="1")
     with tempfile.TemporaryDirectory(prefix="forge-smoke-") as temporary:
-        for key in ("FORGE_CONNECT", "FORGE_PORT", "FORGE_SMOKE_MENU"):
+        for key in ("FORGE_CONNECT", "FORGE_PORT", "FORGE_SMOKE_MENU", "FORGE_SMOKE_INVENTORY"):
             environment.pop(key, None)
         environment["FORGE_SETTINGS"] = str(pathlib.Path(temporary) / "settings.cfg")
         def run(binary, env, success):
@@ -41,6 +41,9 @@ def main():
             output = run(executable, dict(environment, FORGE_SMOKE_MENU="1"), True)
             if "Menu scene: vista" not in output or "Smoke passed: 90 frames presented" not in output:
                 raise SystemExit("3D menu smoke did not finish")
+            output = run(executable, dict(environment, FORGE_SMOKE_INVENTORY="1"), True)
+            if "Smoke passed: 90 frames presented" not in output:
+                raise SystemExit("Inventory/crafting smoke did not finish")
             run(executable, dict(environment, FORGE_CONNECT="invalid"), False)
         run(executable, dict(environment, FORGE_SMOKE="invalid"), False)
         # A relocated executable without assets must fail, even when the source tree exists.

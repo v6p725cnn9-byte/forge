@@ -51,6 +51,27 @@ void Sim::reset()
     far_tree.position = {0.0f, 0.0f, 92.0f};
     far_tree.hits = 3;
     nodes_.push_back(far_tree);
+    // A renewable hand-gathering layer prevents a broken-tool resource deadlock.
+    for (int ring = 0; ring < 4; ++ring) {
+        for (int i = 0; i < 24; ++i) {
+            Node pickup;
+            pickup.kind = static_cast<NodeKind>(static_cast<int>(NodeKind::Stick) + i % 4);
+            const float angle = glm::radians(i * 15.0f + ring * 7.5f);
+            const float radius = 5.0f + ring * 6.0f;
+            pickup.position = {std::cos(angle) * radius, 0, 4 + std::sin(angle) * radius};
+            pickup.radius = .35f;
+            pickup.hits = 1;
+            nodes_.push_back(pickup);
+        }
+    }
+    for (int i = 0; i < 6; ++i) {
+        Node ore;
+        ore.kind = NodeKind::IronOre;
+        const float angle = glm::radians(i * 60.0f);
+        ore.position = {std::cos(angle) * 32, 0, 4 + std::sin(angle) * 32};
+        ore.hits = 12;
+        nodes_.push_back(ore);
+    }
 }
 
 glm::vec3 Sim::spawn_point(int player_id) const
@@ -128,6 +149,14 @@ bool Sim::near_fire(const glm::vec3& pos) const
 
 void Sim::tick(float dt, script::Registry& world)
 {
+    if (!std::isfinite(dt) || dt <= 0) return;
+    for (auto& pawn : pawns_) pawn.harvest_cooldown = std::max(0.0f, pawn.harvest_cooldown - dt);
+    for (auto& node : nodes_) {
+        if (!node.alive && node.respawn > 0) {
+            node.respawn = std::max(0.0f, node.respawn - dt);
+            if (node.respawn == 0) { node.alive = true; node.hits = 1; }
+        }
+    }
     if (phase_ != Phase::Play) return;
     clock_ += dt;
     time_left_ -= dt;
@@ -149,6 +178,18 @@ void Sim::tick(float dt, script::Registry& world)
         if (dark && !near_fire(player->position)) pawn.cold = std::min(100.0f, pawn.cold + 14.0f * dt);
         else pawn.cold = std::max(0.0f, pawn.cold - (near_fire(player->position) ? 22.0f : 6.0f) * dt);
         if (pawn.cold > 75.0f) pawn.hp -= 7.0f * dt;
+        // Suit oxygen drains over the session; the extract beacon doubles as a
+        // resupply cache, so standing in its radius refills the tank.
+        if (nearest(player->position, NodeKind::Extract, 6.0f) >= 0)
+            pawn.o2 = std::min(100.0f, pawn.o2 + 15.0f * dt);
+        else
+            pawn.o2 = std::max(0.0f, pawn.o2 - 0.33f * dt);
+        if (pawn.o2 <= 0.0f) pawn.hp -= 2.0f * dt;
+        // Cosmic radiation bites at night away from shelter; campfire EM
+        // shielding and daylight bleed it back off.
+        if (dark && !near_fire(player->position)) pawn.radiation = std::min(100.0f, pawn.radiation + 1.2f * dt);
+        else pawn.radiation = std::max(0.0f, pawn.radiation - (near_fire(player->position) ? 3.0f : 1.0f) * dt);
+        if (pawn.radiation > 75.0f) pawn.hp -= 5.0f * dt;
         if (pawn.hp <= 0.0f) {
             pawn.hp = 0;
             phase_ = Phase::Failed;
@@ -156,42 +197,139 @@ void Sim::tick(float dt, script::Registry& world)
     }
 }
 
-void Sim::harvest(int player_id, script::Registry& world)
+bool Sim::near_station(int id, const script::Registry& world, Station station) const
 {
-    auto* pawn = this->pawn(player_id);
-    const auto* player = world.player(player_id);
-    if (!pawn || !player || pawn->extracted || phase_ != Phase::Play) return;
-    int idx = nearest(player->position, NodeKind::Tree, 2.8f);
-    if (idx < 0) idx = nearest(player->position, NodeKind::Rock, 2.8f);
-    if (idx < 0) return;
-    auto& node = nodes_[static_cast<std::size_t>(idx)];
-    node.hits -= 1;
-    if (node.hits > 0) return;
-    node.alive = false;
-    if (node.kind == NodeKind::Tree) pawn->wood = static_cast<std::uint16_t>(std::min(99, pawn->wood + 2));
-    if (node.kind == NodeKind::Rock) pawn->stone = static_cast<std::uint16_t>(std::min(99, pawn->stone + 2));
+    const auto* player = world.player(id);
+    if (!player) return false;
+    if (station == Station::Hand) return true;
+    return nearest(player->position, station == Station::Furnace ? NodeKind::Furnace : NodeKind::Bench, 4) >= 0;
 }
 
-void Sim::place_fire(int player_id, script::Registry& world)
+Result Sim::action(int id, script::Registry& world, Action operation, std::uint8_t argument)
 {
-    auto* pawn = this->pawn(player_id);
-    const auto* player = world.player(player_id);
-    if (!pawn || !player || pawn->extracted || phase_ != Phase::Play) return;
-    if (pawn->wood < kFireWood || pawn->stone < kFireStone) return;
-    int fires = 0;
-    for (const auto& node : nodes_)
-        if (node.alive && node.kind == NodeKind::Campfire) ++fires;
-    if (fires >= 8) return;
-    pawn->wood = static_cast<std::uint16_t>(pawn->wood - kFireWood);
-    pawn->stone = static_cast<std::uint16_t>(pawn->stone - kFireStone);
-    const float yaw = glm::radians(player->yaw);
-    Node fire;
-    fire.kind = NodeKind::Campfire;
-    fire.position = player->position + glm::vec3{std::sin(yaw), 0.0f, std::cos(yaw)} * 2.2f;
-    fire.position.y = 0;
-    fire.radius = 1.0f;
-    fire.hits = 0;
-    nodes_.push_back(fire);
+    auto* pawn = this->pawn(id);
+    const auto* player = world.player(id);
+    if (!pawn || !player) return Result::Invalid;
+    auto perform = [&]() -> Result {
+        if (phase_ != Phase::Play || pawn->extracted || pawn->hp <= 0) return Result::Invalid;
+        auto& bag = pawn->inventory;
+        const auto item = static_cast<Item>(argument);
+        if (operation == Action::Craft) {
+            if (argument >= kRecipes.size()) return Result::Invalid;
+            if (!near_station(id, world, kRecipes[argument].station)) return Result::NeedStation;
+            return craft_inventory(bag, argument);
+        }
+        if (!valid(item)) return Result::Invalid;
+        if (operation == Action::Equip && item == Item::None) { bag.equipped = item; return Result::Ok; }
+        if (item == Item::None || bag[item] == 0) return Result::Missing;
+        const auto& def = definition(item);
+        if (operation == Action::Equip) {
+            if (def.tool == Tool::None) return Result::Invalid;
+            bag.equipped = item;
+            return Result::Ok;
+        }
+        if (operation == Action::Repair) {
+            if (!def.durability || bag.durability[index(item)] == def.durability) return Result::Invalid;
+            const Item material = item == Item::IronAxe || item == Item::IronPickaxe ? Item::IronIngot : Item::Flint;
+            if (bag[material] < 2 || bag[Item::Rope] < 1) return Result::Missing;
+            bag[material] -= 2;
+            --bag[Item::Rope];
+            bag.durability[index(item)] = def.durability;
+            return Result::Ok;
+        }
+        if (operation == Action::Discard) {
+            --bag[item];
+            if (!bag[item]) {
+                bag.durability[index(item)] = 0;
+                if (bag.equipped == item) bag.equipped = Item::None;
+            }
+            return Result::Ok;
+        }
+        if (operation != Action::Use) return Result::Invalid;
+        if (item == Item::Bandage) {
+            if (pawn->hp >= 100) return Result::Invalid;
+            --bag[item];
+            pawn->hp = std::min(100.0f, pawn->hp + 25);
+            return Result::Ok;
+        }
+        if (item != Item::Campfire && item != Item::Furnace && item != Item::Bench) return Result::Invalid;
+        int placed = 0;
+        for (const auto& node : nodes_)
+            if (node.alive && (node.kind == NodeKind::Campfire || node.kind == NodeKind::Furnace || node.kind == NodeKind::Bench)) ++placed;
+        if (placed >= 16 || nodes_.size() >= 255) return Result::Full;
+        const float angle = glm::radians(player->yaw);
+        const auto position = glm::vec3{player->position.x, 0, player->position.z}
+            + glm::vec3{std::sin(angle), 0, std::cos(angle)} * 2.2f;
+        for (const auto& node : nodes_) {
+            if (!node.alive || node.kind == NodeKind::Stick || node.kind == NodeKind::Pebble
+                || node.kind == NodeKind::Flint || node.kind == NodeKind::Fiber) continue;
+            if (glm::length(glm::vec2(position.x - node.position.x, position.z - node.position.z)) < 1.6f)
+                return Result::Invalid;
+        }
+        Node placed_node;
+        placed_node.kind = item == Item::Campfire ? NodeKind::Campfire : item == Item::Furnace ? NodeKind::Furnace : NodeKind::Bench;
+        placed_node.position = position;
+        placed_node.hits = 0;
+        nodes_.push_back(placed_node);
+        --bag[item];
+        return Result::Ok;
+    };
+    pawn->feedback = perform();
+    return pawn->feedback;
+}
+
+void Sim::harvest(int id, script::Registry& world)
+{
+    auto* pawn = this->pawn(id);
+    const auto* player = world.player(id);
+    if (!pawn || !player || pawn->extracted || phase_ != Phase::Play || pawn->hp <= 0) return;
+    if (pawn->harvest_cooldown > 0) return;
+    int target = -1;
+    float distance = 2.8f;
+    for (std::size_t i = 0; i < nodes_.size(); ++i) {
+        const auto& node = nodes_[i];
+        if (!node.alive || node.kind == NodeKind::Campfire || node.kind == NodeKind::Extract
+            || node.kind == NodeKind::Furnace || node.kind == NodeKind::Bench) continue;
+        const auto delta = node.position - player->position;
+        const float d = glm::length(glm::vec2(delta.x, delta.z));
+        if (d < distance) { target = static_cast<int>(i); distance = d; }
+    }
+    if (target < 0) { pawn->feedback = Result::TooFar; return; }
+    auto& node = nodes_[target];
+    auto& bag = pawn->inventory;
+    const auto& tool = definition(bag.equipped);
+    const Tool required = node.kind == NodeKind::Tree ? Tool::Axe
+        : node.kind == NodeKind::Rock || node.kind == NodeKind::IronOre ? Tool::Pickaxe : Tool::None;
+    if (required != Tool::None && (tool.tool != required || bag[bag.equipped] == 0)) {
+        pawn->feedback = required == Tool::Axe ? Result::NeedAxe : Result::NeedPickaxe;
+        return;
+    }
+    if (required != Tool::None && !bag.durability[index(bag.equipped)]) { pawn->feedback = Result::Broken; return; }
+    Item material = Item::Wood;
+    switch (node.kind) {
+    case NodeKind::Tree: material = Item::Wood; break;
+    case NodeKind::Rock: case NodeKind::Pebble: material = Item::Stone; break;
+    case NodeKind::Stick: material = Item::Stick; break;
+    case NodeKind::Flint: material = Item::Flint; break;
+    case NodeKind::Fiber: material = Item::Fiber; break;
+    case NodeKind::IronOre: material = Item::IronOre; break;
+    default: return;
+    }
+    const bool iron = bag.equipped == Item::IronAxe || bag.equipped == Item::IronPickaxe;
+    const std::uint16_t yield = required != Tool::None ? (iron ? 4 : 2) : (material == Item::Fiber ? 6 : 3);
+    if (!bag.add(material, yield)) { pawn->feedback = Result::Full; return; }
+    if (required != Tool::None) --bag.durability[index(bag.equipped)];
+    if (--node.hits <= 0) {
+        node.alive = false;
+        if (required == Tool::None) node.respawn = 45;
+    }
+    pawn->harvest_cooldown = required == Tool::None ? .25f : .6f;
+    pawn->feedback = Result::Ok;
+}
+
+void Sim::place_fire(int id, script::Registry& world)
+{
+    action(id, world, Action::Use, static_cast<std::uint8_t>(Item::Campfire));
 }
 
 void Sim::try_extract(int player_id, script::Registry& world)

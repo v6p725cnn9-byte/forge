@@ -138,6 +138,23 @@ void SurvivalLab::sync_debug()
     debug_.survival = true;
     debug_.hp = snap.hp;
     debug_.cold = snap.cold;
+    debug_.o2 = snap.o2;
+    debug_.stamina = snap.stamina;
+    debug_.radiation = snap.radiation;
+    debug_.boosting = boosting_;
+    debug_.near_fire = false;
+    const auto* me = self();
+    if (me) {
+        for (const auto& ghost : snap.entities) {
+            if (ghost.kind != net::Kind::Campfire) continue;
+            const float dx = ghost.position.x - me->position.x;
+            const float dz = ghost.position.z - me->position.z;
+            if (dx * dx + dz * dz < 4.5f * 4.5f) {
+                debug_.near_fire = true;
+                break;
+            }
+        }
+    }
     debug_.wood = snap.wood;
     debug_.stone = snap.stone;
     debug_.time_left = snap.time_left;
@@ -159,6 +176,23 @@ void SurvivalLab::sync_debug()
         if (ghost.kind == net::Kind::Player)
             push_label(visuals_.player_position(ghost.id, ghost.position) + glm::vec3{0, 1.15f, 0}, ghost.name.c_str());
         if (ghost.kind == net::Kind::Extract) push_label(ghost.position + glm::vec3{0, 3.2f, 0}, "EXTRACT");
+        if (me && glm::length(glm::vec2(ghost.position.x-me->position.x,ghost.position.z-me->position.z)) < 7) {
+            const bool en = std::string_view(debug_.language) == "en";
+            const char* label = nullptr;
+            switch (ghost.kind) {
+            case net::Kind::Stick: label = en ? "Sticks [E]" : "Ветки [E]"; break;
+            case net::Kind::Pebble: label = en ? "Loose stone [E]" : "Мелкий камень [E]"; break;
+            case net::Kind::Flint: label = en ? "Flint [E]" : "Кремень [E]"; break;
+            case net::Kind::Fiber: label = en ? "Fiber [E]" : "Волокно [E]"; break;
+            case net::Kind::IronOre: label = en ? "Iron ore / pickaxe" : "Железная руда / кирка"; break;
+            case net::Kind::Rock: label = en ? "Boulder / pickaxe" : "Валун / кирка"; break;
+            case net::Kind::Tree: label = en ? "Tree / axe" : "Дерево / топор"; break;
+            case net::Kind::Bench: label = en ? "Workbench" : "Верстак"; break;
+            case net::Kind::Furnace: label = en ? "Furnace" : "Печь"; break;
+            default: break;
+            }
+            push_label(ghost.position+glm::vec3{0,.8f,0},label);
+        }
         if (ghost.kind == net::Kind::Campfire) push_label(ghost.position + glm::vec3{0, 1.2f, 0}, "fire");
     }
     std::snprintf(debug_.join_hint, sizeof(debug_.join_hint), "%s", join_line_.c_str());
@@ -196,6 +230,9 @@ void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
         walk = app::compose_walk(forward, input.move.x, input.move.z);
         // The torso faces the camera; S strafes backwards, A/D strafe sideways.
         yaw_ = camera.facing_yaw();
+        boosting_ = input.boost && glm::length(glm::vec2(walk.x, walk.z)) > 0.05f;
+    } else {
+        boosting_ = false;
     }
     client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place, input.jump);
     if (hosting_) server_.update(dt);

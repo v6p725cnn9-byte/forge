@@ -8,6 +8,7 @@
 #include <SDL3/SDL.h>
 #include <filesystem>
 #include <string>
+#include <memory>
 #include <vector>
 
 namespace forge::render {
@@ -15,7 +16,10 @@ namespace forge::render {
 class PbrScene {
 public:
     bool load(SDL_GPUDevice* device, const std::filesystem::path& path, std::string& error);
-    bool ingest(SDL_GPUDevice* device, assets::Scene scene, std::string name, std::string& error);
+    bool ingest(SDL_GPUDevice* device, assets::Scene scene, std::string name, std::string& error,
+                std::shared_ptr<Ibl> lighting = {});
+    // Share only within the same device; release every scene before closing that device.
+    std::shared_ptr<Ibl> lighting() const { return ibl_; }
     void destroy(SDL_GPUDevice* device);
     const assets::Scene& cpu() const { return cpu_; }
     void draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pass, SDL_GPUGraphicsPipeline* culled,
@@ -51,7 +55,7 @@ private:
     std::vector<GpuMaterial> materials_;
     std::vector<assets::Primitive> primitives_;
     std::vector<SDL_GPUSampler*> unique_samplers_;
-    Ibl ibl_{};
+    std::shared_ptr<Ibl> ibl_;
     rhi::Texture white_{};
     SDL_GPUTexture* dummy_shadow_ = nullptr;
     rhi::Texture flat_normal_{};

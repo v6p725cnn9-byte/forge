@@ -66,6 +66,11 @@ struct DebugState {
     bool survival = false;
     float hp = 100;
     float cold = 0;
+    float o2 = 100;
+    float stamina = 100;
+    float radiation = 0;
+    bool near_fire = false;
+    bool boosting = false;
     std::uint32_t wood = 0;
     std::uint32_t stone = 0;
     std::uint32_t time_left = 0;

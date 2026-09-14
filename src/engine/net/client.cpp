@@ -17,9 +17,19 @@ bool Client::connect(const Address& server)
     return socket_.send(server_, hello.data(), hello.size());
 }
 
+bool Client::request(game::Action action, std::uint8_t argument)
+{
+    if (!connected_ || actions_.size() >= 8 || action == game::Action::None) return false;
+    actions_.push_back({next_action_++, action, argument});
+    if (next_action_ == 0) next_action_ = 1;
+    return true;
+}
+
 void Client::close()
 {
     socket_.close();
+    actions_.clear();
+    next_action_ = 1;
     connected_ = false;
     player_id_ = 255;
     seq_ = 1;
@@ -51,6 +61,12 @@ void Client::send_input(float move_x, float move_z, float yaw, bool boost, bool 
     input.interact = interact;
     input.place = place;
     input.jump = jump;
+    if (!actions_.empty()) {
+        const auto& request = actions_.front();
+        input.action_seq = request.seq;
+        input.action = request.action;
+        input.argument = request.argument;
+    }
     const auto packet = pack_input(input);
     socket_.send(server_, packet.data(), packet.size());
     sent_[input.seq] = now;
@@ -70,6 +86,7 @@ void Client::poll()
         player_id_ = 255;
         snapshot_ = {};
         sent_.clear();
+        actions_.clear();
         ping_ms_ = 0;
     }
     std::uint8_t buffer[kMaxPacket + 1];
@@ -97,6 +114,7 @@ void Client::poll()
             have_snapshot_ = true;
             last_receive_ = std::chrono::steady_clock::now();
             snapshot_ = std::move(snapshot);
+            if (!actions_.empty() && snapshot_.action_ack == actions_.front().seq) actions_.pop_front();
             const auto found = sent_.find(snapshot_.ack);
             if (found != sent_.end()) {
                 const auto dt = std::chrono::steady_clock::now() - found->second;

@@ -2,7 +2,7 @@
 schema = "tomlmd/v1"
 project = "forge"
 version = "0.9.0"
-active_milestone = "G1"
+active_milestone = "G2"
 bar = "above-samp"
 visual_target = "gta-iv / sleeping-dogs class"
 
@@ -53,6 +53,11 @@ status = "done"
 [[milestones]]
 id = "G1"
 title = "Survival session and menu"
+status = "done"
+
+[[milestones]]
+id = "G2"
+title = "Inventory and survival economy"
 status = "done"
 
 [[tasks]]
@@ -156,6 +161,24 @@ id = "g1-ui-text-fx"
 milestone = "G1"
 status = "done"
 title = "UMG-style text effects: outline, softness, glow and shadow on the SDF atlas"
+
+[[tasks]]
+id = "g1-ui-kit"
+milestone = "G1"
+status = "done"
+title = "Full UI kit: SDF boxes, restyled widgets, layout cursors, tabs, dropdown, scrollbox"
+
+[[tasks]]
+id = "g1-ui-glass"
+milestone = "G1"
+status = "done"
+title = "UE-style frosted glass: scene composite plus mip-chain backdrop blur for panels"
+
+[[tasks]]
+id = "g1-survival-vitals"
+milestone = "G1"
+status = "done"
+title = "O2/stamina/radiation sim stats with Cosmic-Grind-style HUD panel"
 
 [[tasks]]
 id = "m0-windows-local-launch"
@@ -354,6 +377,24 @@ id = "g1-stability"
 milestone = "G1"
 status = "done"
 title = "Network validation/reconnect, GPU cleanup and regression coverage"
+
+[[tasks]]
+id = "g2-economy"
+milestone = "G2"
+status = "done"
+title = "Authoritative inventory, hand gathering, crafting, tools and iron progression"
+
+[[tasks]]
+id = "g2-inventory-ui"
+milestone = "G2"
+status = "done"
+title = "In-game Inventory/Crafting tabs, weight, repair and reliable actions"
+
+[[tasks]]
+id = "g2-models"
+milestone = "G2"
+status = "done"
+title = "CC0 tools, resources and crafting station models"
 +++
 
 # Forge
@@ -568,3 +609,50 @@ Smoke использует временный файл настроек и не 
 - [x] `g1-diagonal-walk` — нормализация диагоналей WASD, пакеты проходят валидацию, диагонали двигают
 - [x] `g1-msdf-font` — MSDF-атлас шрифта через stb SDF и UI-шейдер с резолвом дистанции
 - [x] `g1-ui-text-fx` — текстовые эффекты в духе UMG: outline, softness, glow и shadow на SDF-атласе
+- [x] `g1-ui-kit` — взрослый UI-кит: SDF-боксы, рестайл виджетов, курсоры, табы, дропдаун, скролл
+- [x] `g1-ui-glass` — матовое стекло как в UE: composite сцены и mip-блур под панелями
+- [x] `g1-survival-vitals` — O2/стамина/радиация в симе и HUD-панель в стиле мокапа
+
+
+### G2 Inventory and survival economy
+
+- [x] `g2-economy` — предметы, добыча руками/инструментом, прочность, ремонт, печь и железные инструменты
+- [x] `g2-inventory-ui` — вкладки инвентаря и крафта, вес, экипировка и подтверждение серверных действий
+- [x] `g2-models` — модели ресурсов, инструментов и станций Kenney Survival Kit (CC0)
+
+**Управление:** Tab или I открывает две вкладки «Инвентарь» / «Крафты», Escape закрывает их.
+Мир в меню продолжает симулироваться; движение и поворот камеры блокируются.
+1 — лучший имеющийся топор, 2 — лучшая кирка, 3 — руки. E — ближайший ресурс в 2,8 м
+(при удержании RMB, как остальное управление персонажем). C размещает уже созданный костёр.
+Станции и повязку можно применить прямо из инвентаря; кнопка уничтожения удаляет одну единицу.
+
+Рюкзак вмещает 45 кг; материалы ограничены стопками, каждый тип инструмента — одной штукой.
+Ветки, волокно, мелкий камень и кремень собираются руками и восстанавливаются через 45 секунд.
+Деревья требуют топор, валуны и железная руда — кирку. За удар каменный инструмент даёт 2 ресурса,
+железный — 4. Прочность — 40 / 100 ударов. Сломанный инструмент остаётся в рюкзаке;
+ремонт требует 2 кремня (камень) либо 2 слитка (железо) и 1 верёвку.
+
+| Рецепт | Материалы | Условия |
+| --- | --- | --- |
+| Верёвка | 4 волокна | Руками |
+| Каменный топор | 4 ветки + 4 камня + 1 верёвка | Руками |
+| Каменная кирка | 4 ветки + 4 кремня + 2 верёвки | Руками |
+| 4 ветки | 1 древесина | Руками |
+| Повязка (+25 HP) | 8 волокон | Руками |
+| Костёр | 6 древесины + 8 камней | Руками |
+| Печь | 20 камней + 10 древесины + 2 верёвки | Руками |
+| Верстак | 12 древесины + 6 камней + 4 верёвки | Руками |
+| Железный слиток | 2 руды + 1 древесина (топливо) | Печь ближе 4 м |
+| Железный топор | 4 слитка + 4 ветки + 2 верёвки | Верстак ближе 4 м |
+| Железная кирка | 6 слитков + 4 ветки + 2 верёвки | Верстак ближе 4 м |
+
+Это собственный стартовый баланс по мотивам survival-прогрессии Icarus: крафт пока мгновенный,
+без дерева талантов и сохранения между сессиями. Рецепты и вес определены в `src/engine/game/items.hpp`.
+Сервер проверяет доступность материалов/станции, вместимость, инструмент и задержку между ударами.
+Команды крафта/экипировки/ремонта повторяются до подтверждения snapshot и исполняются один раз.
+Версия UDP-протокола — 2; старые сборки несовместимы.
+
+Модели: [Kenney Survival Kit 2.0](https://kenney.nl/assets/survival-kit), CC0.
+Оригиналы, лицензия и SHA256 архива находятся в `assets/models/SurvivalKit/`.
+Бочка используется как полевая печь, связка древесины — как собираемые ветки.
+Модели инструментов видны у персонажа; новые ресурсы и станции отображаются в мире.

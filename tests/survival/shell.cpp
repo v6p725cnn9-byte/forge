@@ -1,9 +1,11 @@
 #include "engine/app/background.hpp"
 #include "engine/app/lab.hpp"
 #include "engine/app/menu.hpp"
+#include "engine/app/inventory_menu.hpp"
 #include "engine/app/menu_scene.hpp"
 #include "engine/app/settings.hpp"
 #include "engine/core/scope_exit.hpp"
+#include "engine/rhi/composite.hpp"
 #include "engine/ui/ui.hpp"
 
 #include "lab.hpp"
@@ -71,12 +73,14 @@ int run_game(const char* window_title)
     ui::Ui game_ui;
     MenuBackground background;
     MenuScene menu_scene;
+    rhi::Composite composite;
     std::unique_ptr<labs::SurvivalLab> session;
     ScopeExit cleanup([&] {
         if (session) session->teardown(host);
         menu_scene.destroy(host);
         background.destroy(host);
         game_ui.destroy(host);
+        composite.destroy(host.device());
     });
     if (!game_ui.create(host)) return 1;
     if (!background.create(host)) SDL_Log("Continuing without a menu backdrop image");
@@ -89,6 +93,8 @@ int run_game(const char* window_title)
     if (host.overlay().visible()) host.overlay().toggle();
 
     Menu menu(settings);
+    InventoryMenu inventory_menu;
+    bool inventory_open = false;
     Settings applied = settings;
     Camera camera;
     camera.sensitivity = settings.sensitivity;
@@ -146,6 +152,16 @@ int run_game(const char* window_title)
             if (event.type == SDL_EVENT_TEXT_INPUT && event.text.text) pending_text += event.text.text;
             if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
                 if (event.key.key == SDLK_BACKSPACE) pending_backspace = true;
+                if (mode == Mode::Play && (event.key.key == SDLK_TAB || event.key.key == SDLK_I)) {
+                    inventory_open = !inventory_open;
+                    if (inventory_open && event.key.key == SDLK_I) inventory_menu.reset();
+                    capture_mouse(host, captured, false);
+                    SDL_StopTextInput(host.window());
+                }
+                if (event.key.key == SDLK_ESCAPE && inventory_open) {
+                    inventory_open = false;
+                    continue;
+                }
                 if (event.key.key == SDLK_ESCAPE) {
                     if (mode == Mode::Play && captured) capture_mouse(host, captured, false);
                     else if (mode == Mode::Play) {
@@ -160,16 +176,24 @@ int run_game(const char* window_title)
                         quit = true;
                     }
                 }
+                if (mode == Mode::Play && session && !inventory_open
+                    && (event.key.key == SDLK_1 || event.key.key == SDLK_2 || event.key.key == SDLK_3)) {
+                    const auto& bag = session->snapshot().inventory;
+                    game::Item tool = game::Item::None;
+                    if (event.key.key == SDLK_1) tool = bag[game::Item::IronAxe] ? game::Item::IronAxe : game::Item::StoneAxe;
+                    if (event.key.key == SDLK_2) tool = bag[game::Item::IronPickaxe] ? game::Item::IronPickaxe : game::Item::StonePickaxe;
+                    session->request(game::Action::Equip,static_cast<std::uint8_t>(tool));
+                }
                 if (mode == Mode::Play && event.key.key == SDLK_F1) host.overlay().toggle();
                 if (mode == Mode::Play && event.key.key == SDLK_F) input.toggle_walk = true;
                 if (mode == Mode::Play && event.key.key == SDLK_V) input.toggle_person = true;
-                if (mode == Mode::Play && captured && !host.overlay().wants_keyboard()) {
+                if (mode == Mode::Play && !inventory_open && captured && !host.overlay().wants_keyboard()) {
                     if (event.key.key == SDLK_E) input.interact = true;
                     if (event.key.key == SDLK_C) input.place = true;
                 }
             }
             if (mode == Mode::Play && event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
-                && event.button.button == SDL_BUTTON_RIGHT && !host.overlay().wants_mouse())
+                && !inventory_open && event.button.button == SDL_BUTTON_RIGHT && !host.overlay().wants_mouse())
                 capture_mouse(host, captured, true);
             if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_RIGHT)
                 capture_mouse(host, captured, false);
@@ -191,22 +215,31 @@ int run_game(const char* window_title)
                 SDL_Delay(10);
                 continue;
             }
+            // The scene renders into the composite first: swapchain textures can
+            // neither be sampled nor blitted, so the backdrop blur reads the
+            // composite and a fullscreen blit presents it afterwards.
+            const auto composite_format = SDL_GetGPUSwapchainTextureFormat(host.device(), host.window());
+            if (!composite.ensure(host.device(), composite_format, width, height)) return 1;
+            auto* target = composite.texture();
+            game_ui.set_time(static_cast<float>(SDL_GetTicks()) / 1000.0f);
             begin_ui(game_ui, host.window(), true, pressed, released, event_x, event_y);
             if (!pending_text.empty()) game_ui.feed_text(pending_text);
             if (pending_backspace) game_ui.key_backspace();
             if (game_ui.wants_text()) SDL_StartTextInput(host.window());
             else SDL_StopTextInput(host.window());
-            const auto result = menu.draw(game_ui);
             if (menu_3d) {
                 const float now_seconds = static_cast<float>(SDL_GetTicks()) / 1000.0f;
-                if (!menu_scene.draw(host, command, swapchain, width, height, now_seconds)) return 1;
-                if (!game_ui.submit(host, command, swapchain, false, {})) return 1;
+                if (!menu_scene.draw(host, command, target, width, height, now_seconds)) return 1;
             } else if (menu_backdrop) {
-                background.blit(command, swapchain, width, height);
-                if (!game_ui.submit(host, command, swapchain, false, {})) return 1;
-            } else if (!game_ui.submit(host, command, swapchain, true, {0.04f, 0.06f, 0.05f, 1.0f})) {
-                return 1;
+                background.blit(command, target, width, height);
+            } else {
+                composite.clear(command.handle, {0.04f, 0.06f, 0.05f, 1.0f});
             }
+            const auto result = menu.draw(game_ui);
+            if (game_ui.wants_backdrop() && !game_ui.prepare_backdrop(host, command, target, width, height))
+                return 1;
+            composite.present(command.handle, swapchain, width, height);
+            if (!game_ui.submit(host, command, swapchain, false, {}, width, height)) return 1;
             if (!command.submit()) return 1;
             if (settings.width != applied.width || settings.height != applied.height
                 || settings.fullscreen != applied.fullscreen || settings.vsync != applied.vsync) {
@@ -236,6 +269,8 @@ int run_game(const char* window_title)
                 camera.sensitivity = settings.sensitivity;
                 camera.invert_y = settings.invert_y;
                 SDL_StopTextInput(host.window());
+                inventory_open = false;
+                inventory_menu.reset();
                 mode = Mode::Play;
             }
             if (smoke_frames > 0 && presented >= smoke_frames) {
@@ -259,11 +294,17 @@ int run_game(const char* window_title)
             }
             camera.sensitivity = settings.sensitivity;
             camera.invert_y = settings.invert_y;
+            if (smoke_frames > 0 && std::getenv("FORGE_SMOKE_INVENTORY")) {
+                inventory_open = true;
+                inventory_menu.reset();
+            }
         }
+        if (smoke_frames > 0 && std::getenv("FORGE_SMOKE_INVENTORY") && presented == 45)
+            inventory_menu.reset(1);
 
         session->debug_state().language = settings.language.c_str();
-        input.captured = captured;
-        if (captured && !host.overlay().wants_keyboard()
+        input.captured = captured && !inventory_open;
+        if (captured && !inventory_open && !host.overlay().wants_keyboard()
             && (SDL_GetWindowFlags(host.window()) & SDL_WINDOW_INPUT_FOCUS)) {
             const bool* keys = SDL_GetKeyboardState(nullptr);
             input.move = {
@@ -297,12 +338,29 @@ int run_game(const char* window_title)
         command.has_swapchain = swapchain != nullptr;
         rhi::FrameResult frame = rhi::FrameResult::skipped;
         if (swapchain) {
-            frame = session->draw(host, command, swapchain, width, height, camera, captured);
+            const auto composite_format = SDL_GetGPUSwapchainTextureFormat(host.device(), host.window());
+            if (!composite.ensure(host.device(), composite_format, width, height)) return 1;
+            auto* target = composite.texture();
+            frame = session->draw(host, command, target, width, height, camera, captured);
             if (frame == rhi::FrameResult::failed) return 1;
+            game_ui.set_time(static_cast<float>(SDL_GetTicks()) / 1000.0f);
             begin_ui(game_ui, host.window(), !captured, pressed, released, event_x, event_y);
             draw_game_hud(game_ui, session->debug_state());
-            draw_world_captions(game_ui, camera, session->debug_state(), game_ui.width(), game_ui.height());
-            if (!game_ui.submit(host, command, swapchain, false, {})) return 1;
+            if (!inventory_open) {
+                draw_world_captions(game_ui, camera, session->debug_state(), game_ui.width(), game_ui.height());
+                game_ui.text(24,static_cast<float>(game_ui.height())-22,"Tab / I — Inventory / Craft",{.8f,.88f,.85f,1},.45f);
+                const bool en = settings.language == "en";
+                game_ui.text(24,130,game::item_name(session->snapshot().inventory.equipped,settings.language),{.8f,.9f,.8f,1},.55f);
+                game_ui.text(24,160,game::result_text(session->snapshot().feedback,en),{.9f,.75f,.45f,1},.5f);
+            } else {
+                const auto action = inventory_menu.draw(game_ui,session->snapshot(),session->action_pending(),settings.language.c_str());
+                if (action.close) inventory_open = false;
+                if (action.action != game::Action::None) session->request(action.action,action.argument);
+            }
+            if (game_ui.wants_backdrop() && !game_ui.prepare_backdrop(host, command, target, width, height))
+                return 1;
+            composite.present(command.handle, swapchain, width, height);
+            if (!game_ui.submit(host, command, swapchain, false, {}, width, height)) return 1;
             if (host.overlay().visible()) {
                 host.overlay().begin_frame();
                 host.overlay().draw_debug(camera, session->debug_state(), host.backend(), width, height,

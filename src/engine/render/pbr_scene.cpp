@@ -113,7 +113,8 @@ bool PbrScene::load(SDL_GPUDevice* device, const std::filesystem::path& path, st
     return ingest(device, std::move(scene), path.stem().string(), error);
 }
 
-bool PbrScene::ingest(SDL_GPUDevice* device, assets::Scene scene, std::string name, std::string& error)
+bool PbrScene::ingest(SDL_GPUDevice* device, assets::Scene scene, std::string name, std::string& error,
+                      std::shared_ptr<Ibl> lighting)
 {
     destroy(device);
     for (const auto& warning : scene.warnings) SDL_Log("glTF: %s", warning.c_str());
@@ -138,11 +139,18 @@ bool PbrScene::ingest(SDL_GPUDevice* device, assets::Scene scene, std::string na
         destroy(device);
         return false;
     }
-    if (!create_studio_ibl(device, ibl_, error)) {
-        destroy(device);
-        return false;
+    ibl_ = std::move(lighting);
+    if (!ibl_) {
+        ibl_ = std::shared_ptr<Ibl>(new Ibl{}, [device](Ibl* lighting) {
+            destroy_ibl(device, *lighting);
+            delete lighting;
+        });
+        if (!create_studio_ibl(device, *ibl_, error)) {
+            destroy(device);
+            return false;
+        }
     }
-    specular_mips = ibl_.specular_mips;
+    specular_mips = ibl_->specular_mips;
 
     assets::TextureRef clamp;
     clamp.min_filter = 9987;
@@ -215,7 +223,7 @@ bool PbrScene::ingest(SDL_GPUDevice* device, assets::Scene scene, std::string na
 void PbrScene::destroy(SDL_GPUDevice* device)
 {
     if (!device) return;
-    destroy_ibl(device, ibl_);
+    ibl_.reset();
     for (auto& texture : images_) rhi::destroy_texture(device, texture);
     images_.clear();
     rhi::destroy_texture(device, white_);
@@ -300,9 +308,9 @@ void PbrScene::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pass, SDL_
             {texture_for(assets::normal, flat_normal_), material.samplers[assets::normal]},
             {texture_for(assets::occlusion, white_), material.samplers[assets::occlusion]},
             {texture_for(assets::emissive, white_), material.samplers[assets::emissive]},
-            {ibl_.irradiance.handle, ibl_sampler_},
-            {ibl_.specular.handle, ibl_sampler_},
-            {ibl_.brdf.handle, lut_sampler_},
+            {ibl_->irradiance.handle, ibl_sampler_},
+            {ibl_->specular.handle, ibl_sampler_},
+            {ibl_->brdf.handle, lut_sampler_},
             {shadow_map, shadow_sampler},
         };
         SDL_BindGPUFragmentSamplers(pass, 0, bindings, 9);
@@ -360,9 +368,9 @@ void PbrScene::draw_instanced(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* 
             {texture_for(assets::normal, flat_normal_), material.samplers[assets::normal]},
             {texture_for(assets::occlusion, white_), material.samplers[assets::occlusion]},
             {texture_for(assets::emissive, white_), material.samplers[assets::emissive]},
-            {ibl_.irradiance.handle, ibl_sampler_},
-            {ibl_.specular.handle, ibl_sampler_},
-            {ibl_.brdf.handle, lut_sampler_},
+            {ibl_->irradiance.handle, ibl_sampler_},
+            {ibl_->specular.handle, ibl_sampler_},
+            {ibl_->brdf.handle, lut_sampler_},
             {shadow_map, shadow_sampler},
         };
         SDL_BindGPUFragmentSamplers(pass, 0, bindings, 9);
@@ -415,9 +423,9 @@ void PbrScene::draw_skinned(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pa
             {texture_for(assets::normal, flat_normal_), material.samplers[assets::normal]},
             {texture_for(assets::occlusion, white_), material.samplers[assets::occlusion]},
             {texture_for(assets::emissive, white_), material.samplers[assets::emissive]},
-            {ibl_.irradiance.handle, ibl_sampler_},
-            {ibl_.specular.handle, ibl_sampler_},
-            {ibl_.brdf.handle, lut_sampler_},
+            {ibl_->irradiance.handle, ibl_sampler_},
+            {ibl_->specular.handle, ibl_sampler_},
+            {ibl_->brdf.handle, lut_sampler_},
             {shadow_map, shadow_sampler},
         };
         SDL_BindGPUFragmentSamplers(pass, 0, bindings, 9);

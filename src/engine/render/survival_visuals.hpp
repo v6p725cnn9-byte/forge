@@ -47,6 +47,8 @@ private:
     PbrScene rock_;
     PbrScene campfire_;
     PbrScene flame_;
+    std::array<PbrScene, 10> supplies_;
+    std::array<glm::mat4, 10> supply_transforms_{};
     glm::mat4 astronaut_transform_{1};
     std::array<glm::mat4, 3> tree_transforms_{};
     glm::mat4 rock_transform_{1};

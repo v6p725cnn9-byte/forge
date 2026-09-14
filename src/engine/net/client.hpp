@@ -4,6 +4,7 @@
 #include "engine/net/socket.hpp"
 
 #include <chrono>
+#include <deque>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -18,6 +19,8 @@ public:
     void send_input(float move_x, float move_z, float yaw, bool boost, bool interact = false, bool place = false,
                     bool jump = false);
     void poll();
+    bool request(game::Action action, std::uint8_t argument);
+    bool action_pending() const { return !actions_.empty(); }
     bool connected() const { return connected_; }
     std::uint8_t player_id() const { return player_id_; }
     const Snapshot& snapshot() const { return snapshot_; }
@@ -26,6 +29,9 @@ public:
     float stream_radius() const { return stream_radius_; }
 
 private:
+    struct Request { std::uint32_t seq; game::Action action; std::uint8_t argument; };
+    std::deque<Request> actions_;
+    std::uint32_t next_action_ = 1;
     Udp socket_;
     Address server_{};
     bool connected_ = false;

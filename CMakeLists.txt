@@ -130,8 +130,11 @@ target_link_libraries(forge_world PUBLIC glm::glm)
 
 add_library(forge_engine STATIC
     src/engine/app/run.cpp
+    src/engine/rhi/composite.cpp
+    src/engine/ui/backdrop.cpp
     src/engine/app/settings.cpp
     src/engine/app/menu.cpp
+    src/engine/app/inventory_menu.cpp
     src/engine/app/background.cpp
     src/engine/app/menu_scene.cpp
     src/engine/ui/font.cpp
@@ -256,6 +259,9 @@ add_custom_target(forge_stage_runtime
         ${CMAKE_SOURCE_DIR}/assets/scripts/main.lua
         ${CMAKE_SOURCE_DIR}/assets/scripts/net.lua
         ${CMAKE_BINARY_DIR}/scripts
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets/models/SurvivalKit
+        ${CMAKE_BINARY_DIR}/assets/models/SurvivalKit
     COMMENT "Stage shaders and assets"
 )
 add_dependencies(forge_stage_runtime forge_shaders)
@@ -333,6 +339,10 @@ if(BUILD_TESTING)
     target_link_libraries(net_tests PRIVATE forge_net)
     add_test(NAME net COMMAND net_tests)
 
+    add_executable(economy_tests tests/economy_tests.cpp)
+    target_link_libraries(economy_tests PRIVATE forge_game)
+    add_test(NAME economy COMMAND economy_tests)
+
     add_executable(survival_tests tests/survival_tests.cpp)
     target_link_libraries(survival_tests PRIVATE forge_net)
     add_test(NAME survival COMMAND survival_tests)
@@ -362,6 +372,6 @@ if(BUILD_TESTING)
         add_test(NAME gpu_smoke_m6 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m6>)
         add_test(NAME gpu_smoke_m7 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m7>)
         add_test(NAME gpu_smoke_survival COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge>)
-        set_tests_properties(gpu_smoke_m1 gpu_smoke_m2 gpu_smoke_m3 gpu_smoke_m4 gpu_smoke_m5 gpu_smoke_m6 gpu_smoke_m7 gpu_smoke_survival PROPERTIES TIMEOUT 90 LABELS gpu RUN_SERIAL TRUE)
+        set_tests_properties(gpu_smoke_m1 gpu_smoke_m2 gpu_smoke_m3 gpu_smoke_m4 gpu_smoke_m5 gpu_smoke_m6 gpu_smoke_m7 gpu_smoke_survival PROPERTIES TIMEOUT 120 LABELS gpu RUN_SERIAL TRUE)
     endif()
 endif()

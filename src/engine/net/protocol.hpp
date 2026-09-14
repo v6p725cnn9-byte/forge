@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include "engine/game/items.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -14,7 +15,7 @@ constexpr bool sequence_newer(std::uint32_t candidate, std::uint32_t previous)
 }
 
 constexpr std::uint32_t kMagic = 0x37475246u;
-constexpr std::uint8_t kVersion = 1;
+constexpr std::uint8_t kVersion = 2;
 constexpr std::size_t kMaxPacket = 1400;
 constexpr int kMaxSnapshotEntities = 32;
 constexpr float kDefaultStreamRadius = 55.0f;
@@ -31,6 +32,7 @@ enum class Kind : std::uint8_t {
     Rock = 6,
     Campfire = 7,
     Extract = 8,
+    Stick = 9, Pebble, Flint, Fiber, IronOre, Furnace, Bench,
 };
 
 struct Input {
@@ -42,6 +44,9 @@ struct Input {
     bool interact = false;
     bool place = false;
     bool jump = false;
+    std::uint32_t action_seq = 0;
+    game::Action action = game::Action::None;
+    std::uint8_t argument = 0;
 };
 
 struct Ghost {
@@ -51,6 +56,7 @@ struct Ghost {
     float yaw = 0;
     float size = 1;
     glm::vec4 color{1};
+    game::Item equipped = game::Item::None;
     std::string name;
     std::string text;
 };
@@ -68,11 +74,18 @@ struct Snapshot {
     std::vector<Ghost> entities;
     std::uint8_t hp = 100;
     std::uint8_t cold = 0;
+    std::uint8_t o2 = 100;
+    std::uint8_t stamina = 100;
+    std::uint8_t radiation = 0;
     std::uint16_t wood = 0;
     std::uint16_t stone = 0;
     std::uint8_t phase = 0;
     std::uint16_t time_left = 0;
     std::uint8_t night = 0;
+    game::Inventory inventory;
+    std::uint32_t action_ack = 0;
+    game::Result feedback = game::Result::None;
+    std::uint8_t stations = 0;
 };
 
 std::vector<std::uint8_t> pack_hello();

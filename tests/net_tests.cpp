@@ -55,6 +55,18 @@ int main()
     check(decoded.entities[2].text == "Hello", "label text");
     check(std::abs(decoded.entities[1].size - 1.5f) < 1e-5f, "marker size");
 
+    Snapshot vitals{};
+    vitals.o2 = 84;
+    vitals.stamina = 72;
+    vitals.radiation = 25;
+    const auto vitals_bytes = pack_snapshot(vitals);
+    Snapshot vitals_out{};
+    check(unpack_snapshot(vitals_bytes.data(), vitals_bytes.size(), vitals_out)
+              && vitals_out.o2 == 84 && vitals_out.stamina == 72 && vitals_out.radiation == 25,
+          "o2/stamina/radiation round-trip");
+    vitals.radiation = 101;
+    const auto bad_bytes = pack_snapshot(vitals);
+    check(!unpack_snapshot(bad_bytes.data(), bad_bytes.size(), vitals_out), "overcapped vitals rejected");
     Input input{7, 0.5f, -1.0f, 45.0f, true};
     const auto input_bytes = pack_input(input);
     Input input_out{};
@@ -76,7 +88,7 @@ int main()
     malformed = pack_input(input);
     check(!unpack_input(malformed.data(), malformed.size(), input_out), "unbounded movement rejected");
     malformed = input_bytes;
-    malformed.back() = 128;
+    malformed[24] = 128;
     check(!unpack_input(malformed.data(), malformed.size(), input_out), "unknown input flags rejected");
     malformed = pack_hello();
     malformed.push_back(0);
@@ -222,12 +234,32 @@ int main()
     const float second_x = world.player(raw_welcome.player_id)->position.x;
     send_raw(pack_input({0xfffffff0u, -1, 0, 0, false}));
     check(world.player(raw_welcome.player_id)->position.x > second_x, "very old input cannot replace movement");
+    auto& raw_bag = sim.pawn(raw_welcome.player_id)->inventory;
+    raw_bag[forge::game::Item::Fiber] = 8;
+    Input craft_request{};
+    craft_request.seq=4; craft_request.action_seq=1;
+    craft_request.action=forge::game::Action::Craft; craft_request.argument=0;
+    send_raw(pack_input(craft_request));
+    check(raw_bag[forge::game::Item::Rope]==1,"server crafts from authoritative inventory");
+    craft_request.seq=5;
+    send_raw(pack_input(craft_request));
+    check(raw_bag[forge::game::Item::Rope]==1 && raw_bag[forge::game::Item::Fiber]==4,
+          "retried craft action consumes ingredients exactly once");
+    sim.pawn(client.player_id())->inventory[forge::game::Item::Fiber]=4;
+    check(client.request(forge::game::Action::Craft,0),"enqueue reliable action");
+    for (int i=0;i<40 && client.action_pending();++i) {
+        client.send_input(0,0,0,false); server.update(.05f); client.poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    check(!client.action_pending() && client.snapshot().inventory[forge::game::Item::Rope]==1,
+          "snapshot acknowledges action and replicates crafted inventory");
+
     const auto finite_tick = server.tick();
     server.update(std::numeric_limits<float>::infinity());
     check(server.tick() == finite_tick, "non-finite delta cannot hang server");
 
     const auto id = client.player_id();
-    sim.pawn(id)->wood = 9;
+    sim.pawn(id)->inventory[forge::game::Item::Wood] = 9;
     std::this_thread::sleep_for(std::chrono::milliseconds(3100));
     guarded.poll();
     check(!guarded.connected() && guarded.player_id() == 255 && guarded.snapshot().entities.empty(),
@@ -241,7 +273,7 @@ int main()
         client.poll();
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    check(client.connected() && client.player_id() == id && sim.pawn(id)->wood == 0,
+    check(client.connected() && client.player_id() == id && sim.pawn(id)->inventory[forge::game::Item::Wood] == 0,
           "same endpoint reconnects with fresh inventory");
     server.close();
     check(!world.player(id) && !sim.pawn(id), "server close releases owned players");

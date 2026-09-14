@@ -34,6 +34,8 @@ private:
         bool pending_interact = false;
         bool pending_place = false;
         float vertical_velocity = 0.0f;
+        std::uint32_t action_ack = 0;
+        Input pending_action{};
         std::chrono::steady_clock::time_point last_recv{};
     };
 

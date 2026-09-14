@@ -33,6 +33,9 @@ public:
     }
     rhi::HostConfig host_config() const override { return {.hdr = true, .bloom = true}; }
     bool setup(rhi::Host& host, Camera& camera) override;
+    const net::Snapshot& snapshot() const { return client_.snapshot(); }
+    bool action_pending() const { return client_.action_pending(); }
+    bool request(game::Action action, std::uint8_t argument) { return client_.request(action, argument); }
     void update(float dt, Camera& camera, const app::LabInput& input) override;
     rhi::FrameResult draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
                           Uint32 height, Camera& camera, bool captured) override;
@@ -54,6 +57,7 @@ private:
     bool hosting_ = true;
     bool configured_ = false;
     float yaw_ = 0;
+    bool boosting_ = false;
     std::string join_line_;
     SessionLaunch launch_{};
 };

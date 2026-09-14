@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/script/registry.hpp"
+#include "engine/game/items.hpp"
 
 #include <glm/glm.hpp>
 #include <cstdint>
@@ -8,7 +9,7 @@
 
 namespace forge::game {
 
-enum class NodeKind : std::uint8_t { Tree = 1, Rock = 2, Campfire = 3, Extract = 4 };
+enum class NodeKind : std::uint8_t { Tree = 1, Rock = 2, Campfire = 3, Extract = 4, Stick, Pebble, Flint, Fiber, IronOre, Furnace, Bench };
 
 enum class Phase : std::uint8_t { Play = 0, Won = 1, Failed = 2 };
 
@@ -18,6 +19,7 @@ struct Node {
     glm::vec3 position{0};
     float radius = 1.1f;
     int hits = 3;
+    float respawn = 0;
 };
 
 struct Pawn {
@@ -25,15 +27,17 @@ struct Pawn {
     bool extracted = false;
     float hp = 100;
     float cold = 0;
-    std::uint16_t wood = 0;
-    std::uint16_t stone = 0;
+    float o2 = 100;
+    float stamina = 100;
+    float radiation = 0;
+    Inventory inventory;
+    float harvest_cooldown = 0;
+    Result feedback = Result::None;
 };
 
 class Sim {
 public:
     static constexpr float kSessionSeconds = 360.0f;
-    static constexpr int kFireWood = 3;
-    static constexpr int kFireStone = 2;
 
     void reset();
     void ensure_pawn(int player_id);
@@ -41,6 +45,8 @@ public:
     glm::vec3 spawn_point(int player_id) const;
     void tick(float dt, script::Registry& world);
     void harvest(int player_id, script::Registry& world);
+    Result action(int player_id, script::Registry& world, Action action, std::uint8_t argument);
+    bool near_station(int player_id, const script::Registry& world, Station station) const;
     void place_fire(int player_id, script::Registry& world);
     void try_extract(int player_id, script::Registry& world);
 

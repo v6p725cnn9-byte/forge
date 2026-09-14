@@ -139,6 +139,9 @@ std::vector<std::uint8_t> pack_input(const Input& input)
     if (input.place) flags |= 4;
     if (input.jump) flags |= 8;
     w.u8(flags);
+    w.u32(input.action_seq);
+    w.u8(static_cast<std::uint8_t>(input.action));
+    w.u8(input.argument);
     w.finish();
     return w.bytes;
 }
@@ -156,10 +159,10 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
     std::uint8_t written = 0;
     for (std::uint8_t i = 0; i < count; ++i) {
         const auto& e = snapshot.entities[i];
-        const std::size_t extra = e.kind == Kind::Player ? 16 : e.kind == Kind::Marker ? 7
+        const std::size_t extra = e.kind == Kind::Player ? 17 : e.kind == Kind::Marker ? 7
             : e.kind == Kind::Label ? 1 + std::min(e.text.size(), std::size_t{48}) : 0;
-        // Reserve the ten-byte survival trailer within the UDP budget.
-        if (w.bytes.size() + 18 + extra + 10 > kMaxPacket) break;
+        // Reserve vitals, inventory, action acknowledgement and station flags within the UDP budget.
+        if (w.bytes.size() + 18 + extra + 13 + 4 * game::kItemCount + 7 > kMaxPacket) break;
         ++written;
         w.u8(static_cast<std::uint8_t>(e.kind));
         w.u8(e.id);
@@ -167,7 +170,7 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
         w.f32(e.position.y);
         w.f32(e.position.z);
         w.f32(e.yaw);
-        if (e.kind == Kind::Player) w.pad(e.name.c_str(), 16);
+        if (e.kind == Kind::Player) { w.pad(e.name.c_str(), 16); w.u8(static_cast<std::uint8_t>(e.equipped)); }
         else if (e.kind == Kind::Marker) {
             w.f32(e.size);
             w.u8(static_cast<std::uint8_t>(std::clamp(e.color.r, 0.0f, 1.0f) * 255.0f));
@@ -182,11 +185,20 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
     w.bytes[count_offset] = written;
     w.u8(snapshot.hp);
     w.u8(snapshot.cold);
+    w.u8(snapshot.o2);
+    w.u8(snapshot.stamina);
+    w.u8(snapshot.radiation);
     w.u16(snapshot.wood);
     w.u16(snapshot.stone);
     w.u8(snapshot.phase);
     w.u16(snapshot.time_left);
     w.u8(snapshot.night);
+    for (auto count : snapshot.inventory.count) w.u16(count);
+    for (auto durability : snapshot.inventory.durability) w.u16(durability);
+    w.u8(static_cast<std::uint8_t>(snapshot.inventory.equipped));
+    w.u32(snapshot.action_ack);
+    w.u8(static_cast<std::uint8_t>(snapshot.feedback));
+    w.u8(snapshot.stations);
     w.finish();
     return w.bytes;
 }
@@ -222,11 +234,15 @@ bool unpack_welcome(const std::uint8_t* data, std::size_t size, Welcome& welcome
 bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input)
 {
     Reader r{data, size, 0};
-    std::uint8_t flags = 0;
+    std::uint8_t flags = 0, action = 0;
     if (!r.header(Packet::Input) || !r.u32(input.seq) || !r.f32(input.move_x) || !r.f32(input.move_z) || !r.f32(input.yaw)
-        || !r.u8(flags) || flags > 15 || r.offset != size
+        || !r.u8(flags) || flags > 15 || !r.u32(input.action_seq) || !r.u8(action) || !r.u8(input.argument)
+        || action > static_cast<std::uint8_t>(game::Action::Discard) || r.offset != size
         || std::abs(input.move_x) > 1.0f || std::abs(input.move_z) > 1.0f)
         return false;
+    input.action = static_cast<game::Action>(action);
+    if (input.action != game::Action::None && (input.action_seq == 0
+        || (input.action == game::Action::Craft ? input.argument >= game::kRecipes.size() : input.argument >= game::kItemCount))) return false;
     input.boost = (flags & 1) != 0;
     input.interact = (flags & 2) != 0;
     input.place = (flags & 4) != 0;
@@ -249,10 +265,12 @@ bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snaps
         if (!r.u8(kind) || !r.u8(ghost.id) || !r.f32(ghost.position.x) || !r.f32(ghost.position.y)
             || !r.f32(ghost.position.z) || !r.f32(ghost.yaw))
             return false;
-        if (kind < 1 || kind > 8) return false;
+        if (kind < 1 || kind > static_cast<std::uint8_t>(Kind::Bench)) return false;
         ghost.kind = static_cast<Kind>(kind);
         if (ghost.kind == Kind::Player) {
-            if (!r.pad(ghost.name, 16)) return false;
+            std::uint8_t equipped = 0;
+            if (!r.pad(ghost.name, 16) || !r.u8(equipped) || equipped >= game::kItemCount) return false;
+            ghost.equipped = static_cast<game::Item>(equipped);
         } else if (ghost.kind == Kind::Marker) {
             std::uint8_t cr = 0, cg = 0, cb = 0;
             if (!r.f32(ghost.size) || !r.u8(cr) || !r.u8(cg) || !r.u8(cb)) return false;
@@ -265,10 +283,22 @@ bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snaps
         }
         snapshot.entities.push_back(std::move(ghost));
     }
-    return r.u8(snapshot.hp) && r.u8(snapshot.cold) && r.u16(snapshot.wood) && r.u16(snapshot.stone)
-        && r.u8(snapshot.phase) && r.u16(snapshot.time_left) && r.u8(snapshot.night)
-        && snapshot.hp <= 100 && snapshot.cold <= 100 && snapshot.phase <= 2 && snapshot.night <= 1
-        && r.offset == size;
+    const bool vitals = r.u8(snapshot.hp) && r.u8(snapshot.cold) && r.u8(snapshot.o2) && r.u8(snapshot.stamina)
+        && r.u8(snapshot.radiation) && r.u16(snapshot.wood) && r.u16(snapshot.stone) && r.u8(snapshot.phase)
+        && r.u16(snapshot.time_left) && r.u8(snapshot.night) && snapshot.hp <= 100 && snapshot.cold <= 100
+        && snapshot.o2 <= 100 && snapshot.stamina <= 100 && snapshot.radiation <= 100 && snapshot.phase <= 2
+        && snapshot.night <= 1;
+    if (!vitals) return false;
+    for (std::size_t i = 0; i < game::kItemCount; ++i)
+        if (!r.u16(snapshot.inventory.count[i]) || snapshot.inventory.count[i] > game::kItems[i].stack) return false;
+    for (std::size_t i = 0; i < game::kItemCount; ++i)
+        if (!r.u16(snapshot.inventory.durability[i]) || snapshot.inventory.durability[i] > game::kItems[i].durability) return false;
+    std::uint8_t equipped = 0, feedback = 0;
+    if (!r.u8(equipped) || equipped >= game::kItemCount || !r.u32(snapshot.action_ack) || !r.u8(feedback)
+        || feedback > static_cast<std::uint8_t>(game::Result::Cooldown) || !r.u8(snapshot.stations) || snapshot.stations > 3) return false;
+    snapshot.inventory.equipped = static_cast<game::Item>(equipped);
+    snapshot.feedback = static_cast<game::Result>(feedback);
+    return r.offset == size;
 }
 
 } // namespace forge::net

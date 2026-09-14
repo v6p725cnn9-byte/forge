@@ -109,6 +109,8 @@ void Server::poll()
         if (!sequence_newer(input.seq, peer->last_seq)) continue;
         peer->last_seq = input.seq;
         peer->input = input;
+        if (input.action != game::Action::None && sequence_newer(input.action_seq, peer->action_ack))
+            peer->pending_action = input;
         if (input.interact) peer->pending_interact = true;
         if (input.place) peer->pending_place = true;
         peer->last_recv = std::chrono::steady_clock::now();
@@ -122,17 +124,31 @@ void Server::simulate(float dt)
         if (peer.player_id < 0) continue;
         auto* player = world_->player(peer.player_id);
         if (!player) continue;
+        if (peer.pending_action.action != game::Action::None) {
+            if (sim_) sim_->action(peer.player_id, *world_, peer.pending_action.action, peer.pending_action.argument);
+            peer.action_ack = peer.pending_action.action_seq;
+            peer.pending_action = {};
+        }
         const auto* pawn = sim_ ? sim_->pawn(peer.player_id) : nullptr;
         if (sim_ && sim_->phase() != game::Phase::Play) continue;
         if (pawn && (pawn->extracted || pawn->hp <= 0.0f)) continue;
         glm::vec3 move{peer.input.move_x, 0.0f, peer.input.move_z};
         const float length = glm::length(glm::vec2(move.x, move.z));
         if (length > 1.0f) move /= length;
-        if (length > 0.05f) {
-            const float speed = peer.input.boost ? 9.0f : 5.5f;
-            player->position += move * speed * dt;
-            player->yaw = peer.input.yaw;
+        bool want_boost = peer.input.boost;
+        if (sim_) {
+            if (auto* pawn = sim_->pawn(peer.player_id)) {
+                if (want_boost && length > 0.05f) pawn->stamina = std::max(0.0f, pawn->stamina - 12.0f * dt);
+                else pawn->stamina = std::min(100.0f, pawn->stamina + 8.0f * dt);
+                want_boost = want_boost && pawn->stamina > 1.0f;
+            }
         }
+        if (length > 0.05f) {
+            const float speed = want_boost ? 9.0f : 5.5f;
+            player->position += move * speed * dt;
+
+        }
+        player->yaw = peer.input.yaw;
         // Plain projectile gravity; the pawn center rests 1 m above the feet.
         constexpr float kGroundY = 1.0f;
         constexpr float kGravity = 16.0f;
@@ -150,8 +166,9 @@ void Server::simulate(float dt)
             player->position.y = kGroundY;
         }
         if (sim_ && peer.pending_interact) {
-            sim_->try_extract(peer.player_id, *world_);
             sim_->harvest(peer.player_id, *world_);
+            if (const auto* state = sim_->pawn(peer.player_id); state && state->feedback == game::Result::TooFar)
+                sim_->try_extract(peer.player_id, *world_);
             peer.pending_interact = false;
         }
         if (sim_ && peer.pending_place) {
@@ -199,6 +216,13 @@ void Server::broadcast()
                 ghost.id = static_cast<std::uint8_t>(i);
                 ghost.position = node.position;
                 switch (node.kind) {
+                case game::NodeKind::Stick: ghost.kind = Kind::Stick; break;
+                case game::NodeKind::Pebble: ghost.kind = Kind::Pebble; break;
+                case game::NodeKind::Flint: ghost.kind = Kind::Flint; break;
+                case game::NodeKind::Fiber: ghost.kind = Kind::Fiber; break;
+                case game::NodeKind::IronOre: ghost.kind = Kind::IronOre; break;
+                case game::NodeKind::Furnace: ghost.kind = Kind::Furnace; break;
+                case game::NodeKind::Bench: ghost.kind = Kind::Bench; break;
                 case game::NodeKind::Tree:
                     ghost.kind = Kind::Tree;
                     ghost.size = 1.4f;
@@ -230,13 +254,26 @@ void Server::broadcast()
             if (const auto* pawn = sim_->pawn(peer.player_id)) {
                 snapshot.hp = static_cast<std::uint8_t>(std::clamp(pawn->hp, 0.0f, 100.0f));
                 snapshot.cold = static_cast<std::uint8_t>(std::clamp(pawn->cold, 0.0f, 100.0f));
-                snapshot.wood = pawn->wood;
-                snapshot.stone = pawn->stone;
+                snapshot.o2 = static_cast<std::uint8_t>(std::clamp(pawn->o2, 0.0f, 100.0f));
+                snapshot.stamina = static_cast<std::uint8_t>(std::clamp(pawn->stamina, 0.0f, 100.0f));
+                snapshot.radiation = static_cast<std::uint8_t>(std::clamp(pawn->radiation, 0.0f, 100.0f));
+                snapshot.inventory = pawn->inventory;
+                snapshot.wood = pawn->inventory[game::Item::Wood];
+                snapshot.stone = pawn->inventory[game::Item::Stone];
+                snapshot.feedback = pawn->feedback;
                 if (pawn->extracted && sim_->phase() == game::Phase::Play)
                     snapshot.phase = static_cast<std::uint8_t>(game::Phase::Won);
             }
             snapshot.time_left = static_cast<std::uint16_t>(std::max(0.0f, sim_->time_left()));
             snapshot.night = sim_->night() ? 1 : 0;
+        }
+        snapshot.action_ack = peer.action_ack;
+        if (sim_) {
+            snapshot.stations = (sim_->near_station(peer.player_id, *world_, game::Station::Furnace) ? 1 : 0)
+                | (sim_->near_station(peer.player_id, *world_, game::Station::Bench) ? 2 : 0);
+            for (auto& entity : snapshot.entities)
+                if (entity.kind == Kind::Player)
+                    if (const auto* pawn = sim_->pawn(entity.id)) entity.equipped = pawn->inventory.equipped;
         }
         const auto packet = pack_snapshot(snapshot);
         if (packet.size() <= kMaxPacket) socket_.send(peer.address, packet.data(), packet.size());
