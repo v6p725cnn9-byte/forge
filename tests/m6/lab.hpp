@@ -1,9 +1,9 @@
 #pragma once
 
 #include "engine/app/lab.hpp"
-#include "engine/phys/world.hpp"
-#include "engine/render/pbr_scene.hpp"
-#include "engine/script/vm.hpp"
+#include "engine/physics/world/world.hpp"
+#include "engine/render/passes/opaque/pbr_scene.hpp"
+#include "engine/script/vm/vm.hpp"
 
 #include <string>
 
@@ -16,12 +16,12 @@ public:
     {
         return {"pbr.vert", "pbr.frag", "tonemap.vert", "tonemap.frag", "bloom.frag"};
     }
-    rhi::HostConfig host_config() const override { return {.hdr = true, .bloom = false}; }
-    bool setup(rhi::Host& host, Camera& camera) override;
+    render::FrameConfig frame_config() const override { return {.hdr = true, .bloom = false}; }
+    bool setup(rhi::Host& host, render::Renderer& renderer, Camera& camera) override;
     void update(float dt, Camera& camera, const app::LabInput& input) override;
-    rhi::FrameResult draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
+    rhi::FrameResult draw(rhi::Host& host, render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
                           Uint32 height, Camera& camera, bool captured) override;
-    void teardown(rhi::Host& host) override;
+    void teardown(rhi::Host& host, render::Renderer& renderer) override;
     std::uint32_t triangles() const override { return cube_.triangle_count * 24; }
 
 private:

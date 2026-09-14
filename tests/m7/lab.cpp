@@ -1,7 +1,7 @@
 #include "lab.hpp"
 
-#include "engine/core/paths.hpp"
-#include "engine/render/pbr_pass.hpp"
+#include "engine/core/paths/paths.hpp"
+#include "engine/render/passes/opaque/pbr_pass.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
@@ -29,14 +29,14 @@ const net::Ghost* NetLab::self() const
     return nullptr;
 }
 
-bool NetLab::setup(rhi::Host& host, Camera& camera)
+bool NetLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, Camera& camera)
 {
     std::string error;
     if (!cube_.ingest(host.device(), assets::make_unit_cube(), "cube", error)) {
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pbr_ = render::make_pbr_pipeline(host, false);
+    pbr_ = render::make_pbr_pipeline(host, renderer, false);
     if (!pbr_) return false;
     if (!vm_.open(world_, &camera)) {
         SDL_Log("Lua VM failed: %s", vm_.last_error().c_str());
@@ -162,21 +162,21 @@ void NetLab::update(float dt, Camera& camera, const app::LabInput& input)
     follow_camera(camera);
 }
 
-rhi::FrameResult NetLab::draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
-                              Uint32 height, Camera& camera, bool)
+rhi::FrameResult NetLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command,
+                              SDL_GPUTexture* swapchain, Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!host.resize(width, height, host_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     render::CameraUniforms camera_ubo{};
     camera_ubo.view_projection = camera.projection(aspect) * camera.view();
 
     SDL_GPUColorTargetInfo color{};
-    color.texture = host.hdr();
+    color.texture = renderer.hdr();
     color.clear_color = {0.16f, 0.28f, 0.42f, 1.0f};
     color.load_op = SDL_GPU_LOADOP_CLEAR;
     color.store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPUDepthStencilTargetInfo depth{};
-    depth.texture = host.depth();
+    depth.texture = renderer.depth();
     depth.clear_depth = 1.0f;
     depth.load_op = SDL_GPU_LOADOP_CLEAR;
     depth.store_op = SDL_GPU_STOREOP_DONT_CARE;
@@ -208,11 +208,11 @@ rhi::FrameResult NetLab::draw(rhi::Host& host, rhi::Command& command, SDL_GPUTex
         }
     }
     SDL_EndGPURenderPass(pass);
-    if (!render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
+    if (!renderer.apply_tonemap(command, swapchain, debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 
-void NetLab::teardown(rhi::Host& host)
+void NetLab::teardown(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer)
 {
     client_.close();
     server_.close();

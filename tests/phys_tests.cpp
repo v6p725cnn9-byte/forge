@@ -1,5 +1,5 @@
-#include "engine/phys/als.hpp"
-#include "engine/phys/world.hpp"
+#include "engine/physics/locomotion/als.hpp"
+#include "engine/physics/world/world.hpp"
 
 #include <cmath>
 #include <cstdlib>

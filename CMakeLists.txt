@@ -89,15 +89,24 @@ if(NOT MSVC)
     target_compile_options(lua_static PRIVATE -w)
 endif()
 
-add_library(forge_asset_deps STATIC src/engine/assets/dependencies.cpp third_party/mikktspace/mikktspace.c)
+add_library(forge_asset_deps STATIC src/engine/assets/gltf/dependencies.cpp third_party/mikktspace/mikktspace.c)
 target_include_directories(forge_asset_deps SYSTEM PUBLIC third_party/cgltf third_party/stb third_party/mikktspace)
 
-add_library(forge_assets STATIC src/engine/assets/gltf.cpp src/engine/assets/cube.cpp src/engine/assets/terrain.cpp
-    src/engine/anim/animator.cpp)
+add_library(forge_assets STATIC
+    src/engine/assets/gltf/gltf.cpp
+    src/engine/assets/gltf/cube.cpp
+    src/engine/assets/gltf/terrain.cpp
+    src/engine/assets/ktx2/ktx2.cpp
+    src/engine/assets/manager/manager.cpp
+)
 target_include_directories(forge_assets PUBLIC src)
-target_link_libraries(forge_assets PUBLIC glm::glm PRIVATE forge_asset_deps)
+target_link_libraries(forge_assets PUBLIC glm::glm ktx_read PRIVATE forge_asset_deps)
 
-add_library(forge_camera STATIC src/engine/core/camera.cpp)
+add_library(forge_anim STATIC src/engine/anim/skeleton/animator.cpp)
+target_include_directories(forge_anim PUBLIC src)
+target_link_libraries(forge_anim PUBLIC forge_assets glm::glm)
+
+add_library(forge_camera STATIC src/engine/core/camera/camera.cpp)
 target_include_directories(forge_camera PUBLIC src)
 target_link_libraries(forge_camera PUBLIC glm::glm)
 
@@ -119,79 +128,64 @@ target_include_directories(forge_imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui
 target_link_libraries(forge_imgui PUBLIC SDL3::SDL3)
 
 add_library(forge_world STATIC
-    src/engine/world/store.cpp
-    src/engine/world/sectors.cpp
-    src/engine/world/frustum.cpp
-    src/engine/world/cull.cpp
-    src/engine/world/city.cpp
+    src/engine/world/entities/store.cpp
+    src/engine/world/sectors/sectors.cpp
+    src/engine/world/spatial/frustum.cpp
+    src/engine/world/spatial/cull.cpp
+    src/engine/world/entities/city.cpp
 )
 target_include_directories(forge_world PUBLIC src)
 target_link_libraries(forge_world PUBLIC glm::glm)
 
 add_library(forge_engine STATIC
     src/engine/app/run.cpp
-    src/engine/rhi/composite.cpp
-    src/engine/ui/backdrop.cpp
-    src/engine/app/settings.cpp
-    src/engine/app/menu.cpp
-    src/engine/app/inventory_menu.cpp
-    src/engine/app/background.cpp
-    src/engine/app/menu_scene.cpp
-    src/engine/ui/font.cpp
-    src/engine/ui/ui.cpp
-    src/engine/core/paths.cpp
+    src/engine/render/passes/post/composite.cpp
+    src/engine/rhi/device/resources.cpp
+    src/engine/rhi/buffer/buffer.cpp
+    src/engine/rhi/device/upload.cpp
+    src/engine/rhi/swapchain/swapchain.cpp
+    src/engine/rhi/sampler/sampler.cpp
+    src/engine/render/passes/ui/backdrop.cpp
+    src/engine/frontend/settings/settings.cpp
+    src/engine/frontend/menu/menu.cpp
+    src/engine/frontend/inventory/inventory_menu.cpp
+    src/engine/frontend/menu/background.cpp
+    src/engine/frontend/menu/menu_scene.cpp
+    src/engine/ui/text/font.cpp
+    src/engine/ui/widgets/ui.cpp
+    src/engine/core/paths/paths.cpp
+    src/engine/core/jobs/jobs.cpp
     src/engine/dev/overlay.cpp
-    src/engine/rhi/host.cpp
-    src/engine/rhi/shader.cpp
-    src/engine/rhi/texture.cpp
-    src/engine/render/ibl.cpp
-    src/engine/render/pbr_pass.cpp
-    src/engine/render/pbr_scene.cpp
-    src/engine/render/survival_visuals.cpp
+    src/engine/platform/window/host.cpp
+    src/engine/rhi/shader/shader.cpp
+    src/engine/rhi/texture/texture.cpp
+    src/engine/render/renderer/ibl.cpp
+    src/engine/render/passes/opaque/pbr_pass.cpp
+    src/engine/render/passes/opaque/pbr_scene.cpp
+    src/engine/render/renderer/survival_visuals.cpp
+    src/engine/render/framegraph/framegraph.cpp
+    src/engine/render/renderer/renderer.cpp
+    src/engine/audio/device/device.cpp
 )
 target_include_directories(forge_engine PUBLIC src)
-target_link_libraries(forge_engine PUBLIC SDL3::SDL3 forge_camera forge_assets forge_asset_deps forge_world ktx_read forge_imgui)
+target_link_libraries(forge_engine PUBLIC SDL3::SDL3 forge_camera forge_assets forge_anim forge_asset_deps forge_world ktx_read forge_imgui)
 target_compile_definitions(forge_engine PUBLIC
     FORGE_VERSION="${PROJECT_VERSION}"
     FORGE_DEV_UI=$<BOOL:${FORGE_DEV_UI}>
     FORGE_GPU_DEBUG=$<IF:$<CONFIG:Debug>,1,0>
 )
 
-add_library(forge_physics STATIC src/engine/phys/world.cpp src/engine/phys/als.cpp)
+add_library(forge_physics STATIC src/engine/physics/world/world.cpp src/engine/physics/locomotion/als.cpp)
 target_include_directories(forge_physics PUBLIC src)
 target_link_libraries(forge_physics PUBLIC Jolt glm::glm)
 
-add_library(forge_script STATIC
-    src/engine/script/registry.cpp
-    src/engine/script/api.cpp
-    src/engine/script/vm.cpp
-)
-target_include_directories(forge_script PUBLIC src)
-target_link_libraries(forge_script PUBLIC lua_static glm::glm forge_camera)
-if(MSVC)
-    target_compile_options(forge_script PRIVATE /W4 /permissive-)
-else()
-    target_compile_options(forge_script PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-
-add_library(forge_game STATIC src/engine/game/session.cpp)
-target_include_directories(forge_game PUBLIC src)
-target_link_libraries(forge_game PUBLIC glm::glm forge_script)
-if(MSVC)
-    target_compile_options(forge_game PRIVATE /W4 /permissive-)
-else()
-    target_compile_options(forge_game PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-
 add_library(forge_net STATIC
-    src/engine/net/socket.cpp
-    src/engine/net/protocol.cpp
-    src/engine/net/interest.cpp
-    src/engine/net/server.cpp
-    src/engine/net/client.cpp
+    src/engine/net/transport/socket.cpp
+    src/engine/net/transport/stream.cpp
+    src/engine/net/connection/connection.cpp
+    src/engine/net/transport/channel.cpp
 )
 target_include_directories(forge_net PUBLIC src)
-target_link_libraries(forge_net PUBLIC forge_script forge_game forge_physics glm::glm)
 if(WIN32)
     target_link_libraries(forge_net PUBLIC ws2_32)
 endif()
@@ -199,6 +193,47 @@ if(MSVC)
     target_compile_options(forge_net PRIVATE /W4 /permissive-)
 else()
     target_compile_options(forge_net PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_library(forge_game STATIC
+    src/engine/game/session/session.cpp
+    src/engine/game/actors/actors.cpp
+    src/engine/game/systems/save.cpp
+)
+target_include_directories(forge_game PUBLIC src)
+target_link_libraries(forge_game PUBLIC glm::glm forge_net)
+if(MSVC)
+    target_compile_options(forge_game PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(forge_game PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_library(forge_script STATIC
+    src/engine/script/bindings/api.cpp
+    src/engine/script/vm/vm.cpp
+)
+target_include_directories(forge_script PUBLIC src)
+target_link_libraries(forge_script PUBLIC lua_static glm::glm forge_camera forge_game)
+if(MSVC)
+    target_compile_options(forge_script PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(forge_script PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+add_library(forge_game_net STATIC
+    src/engine/game_net/snapshots/packets.cpp
+    src/engine/game_net/interest/interest.cpp
+    src/engine/game_net/server/server.cpp
+    src/engine/game_net/client/client.cpp
+    src/engine/game_net/prediction/prediction.cpp
+    src/engine/game_net/snapshots/interpolation.cpp
+)
+target_include_directories(forge_game_net PUBLIC src)
+target_link_libraries(forge_game_net PUBLIC forge_net forge_script forge_game forge_physics glm::glm)
+if(MSVC)
+    target_compile_options(forge_game_net PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(forge_game_net PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 file(GLOB FORGE_HELMET_RUNTIME
@@ -288,11 +323,13 @@ if(MSVC)
     target_compile_options(forge_engine PRIVATE /W4 /permissive-)
     target_compile_options(forge_camera PRIVATE /W4 /permissive-)
     target_compile_options(forge_assets PRIVATE /W4 /permissive-)
+    target_compile_options(forge_anim PRIVATE /W4 /permissive-)
     target_compile_options(forge_world PRIVATE /W4 /permissive-)
 else()
     target_compile_options(forge_engine PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(forge_camera PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(forge_assets PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(forge_anim PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(forge_world PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
@@ -308,9 +345,9 @@ forge_lab(forge tests/survival/main.cpp tests/survival/lab.cpp tests/survival/sh
 target_link_libraries(forge_m3 PRIVATE forge_physics)
 target_link_libraries(forge_m5 PRIVATE forge_physics)
 target_link_libraries(forge_m6 PRIVATE forge_physics forge_script)
-target_link_libraries(forge_m7 PRIVATE forge_net)
-target_link_libraries(forge_survival PRIVATE forge_net)
-target_link_libraries(forge PRIVATE forge_net)
+target_link_libraries(forge_m7 PRIVATE forge_game_net)
+target_link_libraries(forge_survival PRIVATE forge_game_net)
+target_link_libraries(forge PRIVATE forge_game_net)
 
 if(BUILD_TESTING)
     add_executable(camera_tests tests/camera_tests.cpp)
@@ -327,7 +364,7 @@ if(BUILD_TESTING)
     add_test(NAME world COMMAND world_tests)
 
     add_executable(skin_tests tests/skin_tests.cpp)
-    target_link_libraries(skin_tests PRIVATE forge_assets)
+    target_link_libraries(skin_tests PRIVATE forge_anim)
     add_test(NAME skin COMMAND skin_tests)
     set_tests_properties(skin PROPERTIES ENVIRONMENT "FORGE_TEST_ROOT=${CMAKE_SOURCE_DIR}")
 
@@ -336,7 +373,7 @@ if(BUILD_TESTING)
     add_test(NAME script COMMAND script_tests)
 
     add_executable(net_tests tests/net_tests.cpp)
-    target_link_libraries(net_tests PRIVATE forge_net)
+    target_link_libraries(net_tests PRIVATE forge_game_net)
     add_test(NAME net COMMAND net_tests)
 
     add_executable(economy_tests tests/economy_tests.cpp)
@@ -344,7 +381,7 @@ if(BUILD_TESTING)
     add_test(NAME economy COMMAND economy_tests)
 
     add_executable(survival_tests tests/survival_tests.cpp)
-    target_link_libraries(survival_tests PRIVATE forge_net)
+    target_link_libraries(survival_tests PRIVATE forge_game_net)
     add_test(NAME survival COMMAND survival_tests)
 
     add_executable(phys_tests tests/phys_tests.cpp)
@@ -360,8 +397,12 @@ if(BUILD_TESTING)
     add_test(NAME ui_font COMMAND ui_tests)
 
     add_executable(app_tests tests/app_tests.cpp)
-    target_link_libraries(app_tests PRIVATE forge_engine forge_net)
+    target_link_libraries(app_tests PRIVATE forge_engine forge_game_net)
     add_test(NAME app COMMAND app_tests)
+
+    add_executable(arch_tests tests/arch_tests.cpp)
+    target_link_libraries(arch_tests PRIVATE forge_engine forge_game_net forge_world)
+    add_test(NAME arch COMMAND arch_tests)
     set_tests_properties(ui_font PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
     add_test(NAME shader_assets COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/cook_shaders.py --check)

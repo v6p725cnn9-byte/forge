@@ -1,8 +1,10 @@
-#include "engine/net/client.hpp"
-#include "engine/net/interest.hpp"
-#include "engine/net/protocol.hpp"
-#include "engine/net/server.hpp"
-#include "engine/script/registry.hpp"
+#include "engine/net/transport/channel.hpp"
+#include "engine/game_net/client/client.hpp"
+#include "engine/game_net/interest/interest.hpp"
+#include "engine/game_net/snapshots/packets.hpp"
+#include "engine/game_net/server/server.hpp"
+#include "engine/net/transport/stream.hpp"
+#include "engine/script/bindings/registry.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -24,6 +26,30 @@ void check(bool condition, const char* message)
 int main()
 {
     using namespace forge::net;
+
+    ByteWriter stream_w;
+    stream_w.u8(7);
+    stream_w.u16(0x0201);
+    stream_w.u32(0x04030201);
+    stream_w.f32(1.5f);
+    stream_w.pad("hi", 4);
+    ByteReader stream_r(stream_w.data(), stream_w.size());
+    std::uint8_t u8 = 0;
+    std::uint16_t u16 = 0;
+    std::uint32_t u32 = 0;
+    float f = 0;
+    std::string pad;
+    check(stream_r.u8(u8) && u8 == 7 && stream_r.u16(u16) && u16 == 0x0201 && stream_r.u32(u32) && u32 == 0x04030201
+              && stream_r.f32(f) && std::abs(f - 1.5f) < 1e-6f && stream_r.pad(pad, 4) && pad == "hi" && stream_r.done(),
+          "byte stream round-trip");
+
+    Connection conn;
+    const auto seq = conn.next_seq();
+    conn.note_send(seq, 1.0, true);
+    check(conn.accept_incoming(3), "first remote seq accepted");
+    check(!conn.accept_incoming(3), "duplicate remote seq dropped");
+    conn.note_acks(seq, 0, 1.08);
+    check(conn.acked_seq(seq) && conn.rtt_ms() > 0.0f && conn.rtt_ms() < 200.0f, "ack samples rtt");
 
     Snapshot original;
     original.tick = 42;
@@ -76,6 +102,12 @@ int main()
     input.jump = true;
     const auto jump_bytes = pack_input(input);
     check(unpack_input(jump_bytes.data(), jump_bytes.size(), input_out) && input_out.jump, "jump flag round-trips");
+    std::uint32_t nonce = 0;
+    const auto ping_bytes = pack_ping(42);
+    check(unpack_ping(ping_bytes.data(), ping_bytes.size(), nonce) && nonce == 42, "ping round-trip");
+    Packet ping_type{};
+    check(unpack_type(ping_bytes.data(), ping_bytes.size(), ping_type) && ping_type == Packet::Ping, "ping type");
+    check(kMaxPacket == kMaxGamePayload && kTransportHeader == kEnvelopeBytes, "packet budget");
 
     check(sequence_newer(0, 0xffffffffu) && !sequence_newer(0xffffffffu, 0)
           && !sequence_newer(5, 5), "sequence wrap and duplicate ordering");
@@ -226,7 +258,10 @@ int main()
     Welcome raw_welcome{};
     Address from{};
     const int got = raw_client.receive(from, hello, sizeof(hello));
-    check(got > 0 && unpack_welcome(hello, static_cast<std::size_t>(got), raw_welcome), "raw handshake");
+    Datagram welcome_d{};
+    check(got > 0 && parse_datagram(hello, static_cast<std::size_t>(got), welcome_d)
+              && unpack_welcome(welcome_d.payload, welcome_d.payload_size, raw_welcome),
+          "raw handshake");
     send_raw(pack_input({2, 1, 0, 0, false}));
     const float first_x = world.player(raw_welcome.player_id)->position.x;
     send_raw(pack_input({2, -1, 0, 0, false}));

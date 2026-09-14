@@ -1,4 +1,4 @@
-#include "engine/game/session.hpp"
+#include "engine/game/session/session.hpp"
 #include <cstdlib>
 #include <iostream>
 
@@ -10,7 +10,7 @@ void check(bool condition, const char* message) {
 int main()
 {
     using namespace forge::game;
-    forge::script::Registry world;
+    Actors world;
     Sim sim;
     sim.reset();
     const int id = world.spawn_player(sim.spawn_point(0));
@@ -28,6 +28,7 @@ int main()
     auto gather = [&](NodeKind kind, Item item, int target) {
         for (int i = 0; bag[item] < target && i < 100; ++i) {
             move_to(kind);
+            sim.pawn(id)->stamina = 100;
             sim.tick(.61f,world);
             sim.harvest(id,world);
             check(sim.pawn(id)->feedback == Result::Ok,"gather should succeed");
@@ -103,8 +104,13 @@ int main()
     Inventory capped; capped.count[index(Item::Fiber)]=200;
     check(!capped.add(Item::Fiber,1),"stack cap enforced");
     check(sim.action(id,world,Action::Equip,255)==Result::Invalid,"invalid item id rejected");
+    world.player(id)->position={0,1,-4};
+    bag[Item::IronIngot]=0;
     sim.try_extract(id,world);
-    world.player(id)->position={0,1,-4}; sim.try_extract(id,world);
+    check(!sim.pawn(id)->extracted,"extract blocked without iron cargo");
+    bag[Item::IronIngot]=4;
+    sim.try_extract(id,world);
+    check(sim.pawn(id)->extracted && bag[Item::IronIngot]==0,"extract spends 4 ingots");
     const auto after_win=bag.count;
     check(craft(0)==Result::Invalid && bag.count==after_win,"no crafting after extraction");
     std::cout << "Economy progression, tools, capacity and station checks passed\n";

@@ -1,6 +1,6 @@
 #include "lab.hpp"
 
-#include "engine/rhi/shader.hpp"
+#include "engine/rhi/shader/shader.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <array>
@@ -39,7 +39,7 @@ void box(std::vector<Vertex>& vertices, std::vector<std::uint32_t>& indices, glm
 
 } // namespace
 
-bool UnlitCubesLab::setup(rhi::Host& host, Camera& camera)
+bool UnlitCubesLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, Camera& camera)
 {
     std::vector<Vertex> vertices;
     std::vector<std::uint32_t> indices;
@@ -122,7 +122,7 @@ bool UnlitCubesLab::setup(rhi::Host& host, Camera& camera)
     info.target_info.num_color_targets = 1;
     info.target_info.color_target_descriptions = &color;
     info.target_info.has_depth_stencil_target = true;
-    info.target_info.depth_stencil_format = host.depth_format();
+    info.target_info.depth_stencil_format = renderer.depth_format();
     pipeline_ = SDL_CreateGPUGraphicsPipeline(host.device(), &info);
     SDL_ReleaseGPUShader(host.device(), vs);
     SDL_ReleaseGPUShader(host.device(), fs);
@@ -139,10 +139,10 @@ void UnlitCubesLab::update(float dt, Camera& camera, const app::LabInput& input)
     if (input.captured) camera.move(input.move, dt, input.boost);
 }
 
-rhi::FrameResult UnlitCubesLab::draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain,
+rhi::FrameResult UnlitCubesLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!host.resize(width, height, host_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
     const glm::mat4 vp = camera.projection(static_cast<float>(width) / static_cast<float>(height)) * camera.view();
     SDL_PushGPUVertexUniformData(command.handle, 0, glm::value_ptr(vp), sizeof(vp));
 
@@ -152,7 +152,7 @@ rhi::FrameResult UnlitCubesLab::draw(rhi::Host& host, rhi::Command& command, SDL
     color.load_op = SDL_GPU_LOADOP_CLEAR;
     color.store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPUDepthStencilTargetInfo depth{};
-    depth.texture = host.depth();
+    depth.texture = renderer.depth();
     depth.clear_depth = 1.0f;
     depth.load_op = SDL_GPU_LOADOP_CLEAR;
     depth.store_op = SDL_GPU_STOREOP_DONT_CARE;
@@ -171,7 +171,7 @@ rhi::FrameResult UnlitCubesLab::draw(rhi::Host& host, rhi::Command& command, SDL
     return rhi::FrameResult::presented;
 }
 
-void UnlitCubesLab::teardown(rhi::Host& host)
+void UnlitCubesLab::teardown(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer)
 {
     if (pipeline_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pipeline_);
     if (vertices_) SDL_ReleaseGPUBuffer(host.device(), vertices_);

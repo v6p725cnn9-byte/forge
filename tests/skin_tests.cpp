@@ -1,5 +1,5 @@
-#include "engine/anim/animator.hpp"
-#include "engine/assets/scene.hpp"
+#include "engine/anim/skeleton/animator.hpp"
+#include "engine/assets/gltf/scene.hpp"
 
 #include <cmath>
 #include <cstdlib>

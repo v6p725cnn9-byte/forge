@@ -1,5 +1,8 @@
 #include "engine/app/lab.hpp"
+#include "engine/core/profiler/profiler.hpp"
 #include "engine/core/scope_exit.hpp"
+#include "engine/core/time/time.hpp"
+#include "engine/render/renderer/renderer.hpp"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -37,10 +40,12 @@ int run_lab(Lab& lab, const char* window_title)
     const bool smoke_resize = smoke_frames > 0 && std::getenv("FORGE_SMOKE_RESIZE") != nullptr;
 
     rhi::Host host;
+    render::Renderer renderer;
     Camera camera;
     if (!host.open(window_title, 1280, 720, lab.shaders())) return 1;
-    ScopeExit cleanup([&] { lab.teardown(host); });
-    if (!lab.setup(host, camera)) return 1;
+    if (!renderer.prepare(host)) return 1;
+    ScopeExit cleanup([&] { lab.teardown(host, renderer); });
+    if (!lab.setup(host, renderer, camera)) return 1;
 
     bool quit = false;
     bool captured = false;
@@ -96,7 +101,7 @@ int run_lab(Lab& lab, const char* window_title)
         const Uint64 counter = SDL_GetPerformanceCounter();
         const auto delta = static_cast<float>(static_cast<double>(counter - previous) / frequency);
         previous = counter;
-        lab.update(std::min(delta, 0.1f), camera, input);
+        lab.update(core::clamp_frame_dt(delta), camera, input);
 
         if (smoke_resize && !resized && presented >= 10) {
             if (!SDL_SetWindowSize(host.window(), 960, 540)) return 1;
@@ -118,13 +123,15 @@ int run_lab(Lab& lab, const char* window_title)
         command.has_swapchain = swapchain != nullptr;
         rhi::FrameResult result = rhi::FrameResult::skipped;
         if (swapchain) {
+            core::frame_profiler().begin_frame();
             host.overlay().build(camera, lab.debug_state(), host.backend(), width, height, lab.triangles(),
                                 captured);
             host.overlay().prepare(command.handle);
-            result = lab.draw(host, command, swapchain, width, height, camera, captured);
+            result = lab.draw(host, renderer, command, swapchain, width, height, camera, captured);
             if (result == rhi::FrameResult::failed) return 1;
             if (!host.present_overlay(command, swapchain)) return 1;
             if (!command.submit()) return 1;
+            core::frame_profiler().end_frame();
             result = rhi::FrameResult::presented;
         } else {
             if (!command.submit()) return 1;

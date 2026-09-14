@@ -1,12 +1,13 @@
-#include "engine/app/background.hpp"
+#include "engine/frontend/menu/background.hpp"
 #include "engine/app/lab.hpp"
-#include "engine/app/menu.hpp"
-#include "engine/app/inventory_menu.hpp"
-#include "engine/app/menu_scene.hpp"
-#include "engine/app/settings.hpp"
+#include "engine/frontend/menu/menu.hpp"
+#include "engine/frontend/inventory/inventory_menu.hpp"
+#include "engine/frontend/menu/menu_scene.hpp"
+#include "engine/frontend/settings/settings.hpp"
 #include "engine/core/scope_exit.hpp"
-#include "engine/rhi/composite.hpp"
-#include "engine/ui/ui.hpp"
+#include "engine/render/passes/post/composite.hpp"
+#include "engine/render/renderer/renderer.hpp"
+#include "engine/ui/widgets/ui.hpp"
 
 #include "lab.hpp"
 
@@ -68,15 +69,17 @@ int run_game(const char* window_title)
     load_settings(settings);
 
     rhi::Host host;
+    render::Renderer renderer;
     if (!host.open(window_title, settings.width, settings.height, kShaders)) return 1;
+    if (!renderer.prepare(host)) return 1;
     if (!host.apply_display(settings.width, settings.height, settings.fullscreen, settings.vsync)) return 1;
     ui::Ui game_ui;
     MenuBackground background;
     MenuScene menu_scene;
-    rhi::Composite composite;
+    render::Composite composite;
     std::unique_ptr<labs::SurvivalLab> session;
     ScopeExit cleanup([&] {
-        if (session) session->teardown(host);
+        if (session) session->teardown(host, renderer);
         menu_scene.destroy(host);
         background.destroy(host);
         game_ui.destroy(host);
@@ -85,7 +88,7 @@ int run_game(const char* window_title)
     if (!game_ui.create(host)) return 1;
     if (!background.create(host)) SDL_Log("Continuing without a menu backdrop image");
     const bool menu_backdrop = background.ready();
-    if (!menu_scene.create(host)) {
+    if (!menu_scene.create(host, renderer)) {
         menu_scene.destroy(host);
         SDL_Log("Continuing without a 3D menu scene");
     }
@@ -167,7 +170,7 @@ int run_game(const char* window_title)
                     else if (mode == Mode::Play) {
                         capture_mouse(host, captured, false);
                         if (session) {
-                            session->teardown(host);
+                            session->teardown(host, renderer);
                             session.reset();
                         }
                         menu.reset();
@@ -229,7 +232,7 @@ int run_game(const char* window_title)
             else SDL_StopTextInput(host.window());
             if (menu_3d) {
                 const float now_seconds = static_cast<float>(SDL_GetTicks()) / 1000.0f;
-                if (!menu_scene.draw(host, command, target, width, height, now_seconds)) return 1;
+                if (!menu_scene.draw(host, renderer, command, target, width, height, now_seconds)) return 1;
             } else if (menu_backdrop) {
                 background.blit(command, target, width, height);
             } else {
@@ -283,9 +286,9 @@ int run_game(const char* window_title)
         if (!session) {
             session = std::make_unique<labs::SurvivalLab>();
             session->configure(launch);
-            if (!session->setup(host, camera)) {
+            if (!session->setup(host, renderer, camera)) {
                 SDL_Log("Failed to start session");
-                session->teardown(host);
+                session->teardown(host, renderer);
                 session.reset();
                 if (smoke_frames > 0) return 1;
                 mode = Mode::Menu;
@@ -341,7 +344,7 @@ int run_game(const char* window_title)
             const auto composite_format = SDL_GetGPUSwapchainTextureFormat(host.device(), host.window());
             if (!composite.ensure(host.device(), composite_format, width, height)) return 1;
             auto* target = composite.texture();
-            frame = session->draw(host, command, target, width, height, camera, captured);
+            frame = session->draw(host, renderer, command, target, width, height, camera, captured);
             if (frame == rhi::FrameResult::failed) return 1;
             game_ui.set_time(static_cast<float>(SDL_GetTicks()) / 1000.0f);
             begin_ui(game_ui, host.window(), !captured, pressed, released, event_x, event_y);

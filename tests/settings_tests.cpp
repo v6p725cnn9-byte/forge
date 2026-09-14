@@ -1,5 +1,5 @@
-#include "engine/app/i18n.hpp"
-#include "engine/app/settings.hpp"
+#include "engine/frontend/menu/i18n.hpp"
+#include "engine/frontend/settings/settings.hpp"
 
 #include <cmath>
 #include <cstdlib>

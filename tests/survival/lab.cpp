@@ -1,6 +1,6 @@
 #include "lab.hpp"
 
-#include "engine/render/pbr_pass.hpp"
+#include "engine/render/passes/opaque/pbr_pass.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
@@ -39,16 +39,16 @@ const net::Ghost* SurvivalLab::self() const
     return nullptr;
 }
 
-bool SurvivalLab::setup(rhi::Host& host, Camera& camera)
+bool SurvivalLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, Camera& camera)
 {
     std::string error;
     if (!cube_.ingest(host.device(), assets::make_unit_cube(), "cube", error)) {
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pbr_ = render::make_pbr_pipeline(host, false);
+    pbr_ = render::make_pbr_pipeline(host, renderer, false);
     if (!pbr_) return false;
-    if (!visuals_.create(host)) return false;
+    if (!visuals_.create(host, renderer)) return false;
 
     unsigned port = env_port();
     net::Address connect{};
@@ -116,7 +116,7 @@ bool SurvivalLab::setup(rhi::Host& host, Camera& camera)
     debug_.survival = true;
     debug_.stream_radius = 70.0f;
     debug_.net_role = hosting_ ? "host" : "client";
-    debug_.help = "WASD walk | Space jump | E chop/extract | C campfire | Shift run | RMB look | V 1st/3rd";
+    debug_.help = "WASD | Space jump | E gather/hit/loot | extract: 4 ingots | C fire | Shift sprint";
     std::snprintf(debug_.join_hint, sizeof(debug_.join_hint), "%s", join_line_.c_str());
     camera.position = {-8.0f, 4.0f, -6.0f};
     camera.look_at({0, 1, 4});
@@ -234,30 +234,31 @@ void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
     } else {
         boosting_ = false;
     }
-    client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place, input.jump);
+    client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place, input.jump, dt);
     if (hosting_) server_.update(dt);
     client_.poll();
-    visuals_.update(client_.snapshot(), client_.player_id(), dt, input.interact || input.place);
+    visuals_.update(client_.view().entities.empty() ? client_.snapshot() : client_.view(), client_.player_id(), dt,
+                    input.interact || input.place);
     sync_debug();
     follow_camera(camera);
 }
 
-rhi::FrameResult SurvivalLab::draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
+rhi::FrameResult SurvivalLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
                                    Uint32 height, Camera& camera, bool)
 {
-    if (!host.resize(width, height, host_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     render::CameraUniforms camera_ubo{};
     camera_ubo.view_projection = camera.projection(aspect) * camera.view();
 
     const bool night = client_.snapshot().night != 0;
     SDL_GPUColorTargetInfo color{};
-    color.texture = host.hdr();
+    color.texture = renderer.hdr();
     color.clear_color = night ? SDL_FColor{0.02f, 0.03f, 0.06f, 1.0f} : SDL_FColor{0.22f, 0.40f, 0.52f, 1.0f};
     color.load_op = SDL_GPU_LOADOP_CLEAR;
     color.store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPUDepthStencilTargetInfo depth{};
-    depth.texture = host.depth();
+    depth.texture = renderer.depth();
     depth.clear_depth = 1.0f;
     depth.load_op = SDL_GPU_LOADOP_CLEAR;
     depth.store_op = SDL_GPU_STOREOP_DONT_CARE;
@@ -284,12 +285,12 @@ rhi::FrameResult SurvivalLab::draw(rhi::Host& host, rhi::Command& command, SDL_G
     visuals_.draw(command.handle, pass, client_.snapshot(), camera_ubo.view_projection, debug_, camera.position,
                   headless_self);
     SDL_EndGPURenderPass(pass);
-    if (!render::apply_bloom(host, command, 1.1f)) return rhi::FrameResult::failed;
-    if (!render::apply_tonemap(host, command, swapchain, night ? 0.7f : debug_.exposure, 0.09f)) return rhi::FrameResult::failed;
+    if (!renderer.apply_bloom(command, 1.1f)) return rhi::FrameResult::failed;
+    if (!renderer.apply_tonemap(command, swapchain, night ? 0.7f : debug_.exposure, 0.09f)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 
-void SurvivalLab::teardown(rhi::Host& host)
+void SurvivalLab::teardown(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer)
 {
     client_.close();
     if (hosting_) server_.close();

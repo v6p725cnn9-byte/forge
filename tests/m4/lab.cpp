@@ -1,20 +1,20 @@
 #include "lab.hpp"
 
-#include "engine/render/pbr_pass.hpp"
+#include "engine/render/passes/opaque/pbr_pass.hpp"
 
 #include <cstring>
 #include <string>
 
 namespace forge::labs {
 
-bool StreamCityLab::setup(rhi::Host& host, Camera& camera)
+bool StreamCityLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, Camera& camera)
 {
     std::string error;
     if (!scene_.ingest(host.device(), assets::make_unit_cube(), "cube", error)) {
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pipeline_ = render::make_pbr_instanced_pipeline(host, false);
+    pipeline_ = render::make_pbr_instanced_pipeline(host, renderer, false);
     if (!pipeline_) return false;
 
     const auto count = world::populate_city(store_);
@@ -76,10 +76,10 @@ bool StreamCityLab::upload_instances(rhi::Host& host, rhi::Command& command)
     return true;
 }
 
-rhi::FrameResult StreamCityLab::draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain,
+rhi::FrameResult StreamCityLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!host.resize(width, height, host_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     const glm::mat4 view_projection = camera.projection(aspect) * camera.view();
     const auto frustum = world::frustum_from_clip(view_projection);
@@ -96,12 +96,12 @@ rhi::FrameResult StreamCityLab::draw(rhi::Host& host, rhi::Command& command, SDL
     SDL_PushGPUVertexUniformData(command.handle, 0, &camera_ubo, sizeof(camera_ubo));
 
     SDL_GPUColorTargetInfo color{};
-    color.texture = host.hdr();
+    color.texture = renderer.hdr();
     color.clear_color = {0.03f, 0.045f, 0.07f, 1.0f};
     color.load_op = SDL_GPU_LOADOP_CLEAR;
     color.store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPUDepthStencilTargetInfo depth{};
-    depth.texture = host.depth();
+    depth.texture = renderer.depth();
     depth.clear_depth = 1.0f;
     depth.load_op = SDL_GPU_LOADOP_CLEAR;
     depth.store_op = SDL_GPU_STOREOP_DONT_CARE;
@@ -113,11 +113,11 @@ rhi::FrameResult StreamCityLab::draw(rhi::Host& host, rhi::Command& command, SDL
     scene_.draw_instanced(command.handle, pass, pipeline_, instances_, static_cast<Uint32>(packed_.size()),
                           debug_, camera.position);
     SDL_EndGPURenderPass(pass);
-    if (!render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
+    if (!renderer.apply_tonemap(command, swapchain, debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 
-void StreamCityLab::teardown(rhi::Host& host)
+void StreamCityLab::teardown(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer)
 {
     scene_.destroy(host.device());
     if (pipeline_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pipeline_);

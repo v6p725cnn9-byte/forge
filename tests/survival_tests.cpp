@@ -1,6 +1,6 @@
-#include "engine/game/session.hpp"
-#include "engine/net/interest.hpp"
-#include "engine/script/registry.hpp"
+#include "engine/game/session/session.hpp"
+#include "engine/game_net/interest/interest.hpp"
+#include "engine/script/bindings/registry.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -68,7 +68,12 @@ int main()
 
     player->position = {0, 1, -4};
     sim.try_extract(id, world);
-    check(sim.pawn(id)->extracted, "extract at beacon");
+    check(!sim.pawn(id)->extracted, "extract without ingots is refused");
+    check(sim.pawn(id)->feedback == forge::game::Result::NeedCargo, "extract asks for cargo");
+    sim.pawn(id)->inventory.add(forge::game::Item::IronIngot, 4);
+    sim.try_extract(id, world);
+    check(sim.pawn(id)->extracted, "extract at beacon with 4 ingots");
+    check(sim.pawn(id)->inventory[forge::game::Item::IronIngot] == 0, "extract consumes cargo");
     check(sim.phase() == forge::game::Phase::Won, "solo extract wins the session");
 
     forge::game::Sim cold;
@@ -96,6 +101,45 @@ int main()
     check(vitals.pawn(v)->o2 > 50.0f, "extract beacon refills oxygen");
 
     check(forge::net::xz_distance({0, 0, 0}, {0, 5, 92}) > 70.0f, "far tree is outside default stream");
+
+    forge::game::Sim fight;
+    fight.reset();
+    const int attacker = world.spawn_player({0, 1, 0});
+    const int victim = world.spawn_player({1.2f, 1, 0});
+    fight.ensure_pawn(attacker);
+    fight.ensure_pawn(victim);
+    world.player(attacker)->position = {0, 1, 0};
+    world.player(victim)->position = {1.2f, 1, 0};
+    fight.pawn(attacker)->inventory.add(forge::game::Item::StoneAxe, 1);
+    fight.pawn(attacker)->inventory.equipped = forge::game::Item::StoneAxe;
+    fight.pawn(victim)->inventory.add(forge::game::Item::Wood, 6);
+    for (int i = 0; i < 5; ++i) {
+        fight.harvest(attacker, world);
+        fight.tick(0.56f, world);
+    }
+    check(fight.pawn(victim)->hp <= 0.0f, "melee with an axe downs a nearby player");
+    check(fight.phase() == forge::game::Phase::Play, "a down does not fail the session");
+    bool loot = false;
+    for (const auto& node : fight.nodes())
+        if (node.alive && node.kind == forge::game::NodeKind::Loot) loot = true;
+    check(loot, "downed player drops a loot cache");
+    fight.tick(8.1f, world);
+    check(fight.pawn(victim)->hp == 100.0f && fight.pawn(victim)->pending_spawn, "downed player respawns");
+
+    forge::game::Sim burn;
+    burn.reset();
+    const int camper = world.spawn_player({40, 1, 40});
+    burn.ensure_pawn(camper);
+    world.player(camper)->position = {40, 1, 40};
+    burn.pawn(camper)->inventory.add(forge::game::Item::Campfire, 1);
+    check(burn.action(camper, world, forge::game::Action::Use, static_cast<std::uint8_t>(forge::game::Item::Campfire))
+              == forge::game::Result::Ok,
+          "place campfire");
+    burn.tick(81.0f, world);
+    int burning = 0;
+    for (const auto& node : burn.nodes())
+        if (node.alive && node.kind == forge::game::NodeKind::Campfire) ++burning;
+    check(burning == 0, "campfire burns out");
 
     check(forge::game::sprint_cone({0, 0, 1}, 0.0f), "sprint cone allows forward sprint");
     check(!forge::game::sprint_cone({0, 0, -1}, 0.0f), "sprint cone denies backpedal sprint");

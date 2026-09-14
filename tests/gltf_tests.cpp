@@ -1,4 +1,4 @@
-#include "engine/assets/scene.hpp"
+#include "engine/assets/gltf/scene.hpp"
 
 #include <cmath>
 #include <cstdlib>

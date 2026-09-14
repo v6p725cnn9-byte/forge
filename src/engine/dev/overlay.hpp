@@ -1,10 +1,13 @@
 #pragma once
 
-#include "engine/core/camera.hpp"
-#include "engine/render/settings.hpp"
+#include "engine/core/camera/camera.hpp"
+#include "engine/render/renderer/settings.hpp"
 #include <SDL3/SDL.h>
 
 namespace forge::dev {
+
+// Debug-only ImGui overlay. Shipping UI is forge::ui — ImGui must never
+// implement menus, inventory, HUD, or settings. FORGE_DEV_UI=0 strips this.
 
 class Overlay {
 public:

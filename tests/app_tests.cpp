@@ -1,5 +1,5 @@
 #include "engine/app/lab.hpp"
-#include "engine/net/protocol.hpp"
+#include "engine/game_net/snapshots/packets.hpp"
 
 #include <cmath>
 #include <cstdlib>

@@ -1,7 +1,7 @@
 #include "engine/dev/overlay.hpp"
 
-#include "engine/app/i18n.hpp"
-#include "engine/core/paths.hpp"
+#include "engine/frontend/menu/i18n.hpp"
+#include "engine/core/paths/paths.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>

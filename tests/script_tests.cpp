@@ -1,6 +1,6 @@
-#include "engine/script/vm.hpp"
+#include "engine/script/vm/vm.hpp"
 
-#include "engine/core/camera.hpp"
+#include "engine/core/camera/camera.hpp"
 
 #include <cmath>
 #include <cstdlib>

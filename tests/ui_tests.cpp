@@ -1,10 +1,11 @@
-#include "engine/app/background.hpp"
-#include "engine/app/menu.hpp"
-#include "engine/app/inventory_menu.hpp"
-#include "engine/app/menu_scene.hpp"
-#include "engine/assets/scene.hpp"
-#include "engine/ui/font.hpp"
-#include "engine/ui/ui.hpp"
+#include "engine/frontend/menu/background.hpp"
+#include "engine/frontend/menu/menu.hpp"
+#include "engine/frontend/inventory/inventory_menu.hpp"
+#include "engine/frontend/menu/menu_scene.hpp"
+#include "engine/render/renderer/renderer.hpp"
+#include "engine/assets/gltf/scene.hpp"
+#include "engine/ui/text/font.hpp"
+#include "engine/ui/widgets/ui.hpp"
 
 #include <stb_image.h>
 
@@ -236,9 +237,10 @@ int main()
     std::cout << "Menu background checks passed (" << menu_w << "x" << menu_h << " c=" << menu_c << ")\n";
 
     forge::rhi::Host closed;
+    forge::render::Renderer renderer;
     forge::app::MenuScene scene;
     check(!scene.ready(), "scene starts not ready");
-    check(!scene.create(closed), "scene refuses a closed device");
+    check(!scene.create(closed, renderer), "scene refuses a closed device");
     check(!scene.ready(), "failed scene stays not ready");
     scene.destroy(closed);
     std::cout << "Menu scene fallback checks passed\n";

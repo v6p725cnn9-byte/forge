@@ -2,9 +2,9 @@
 schema = "tomlmd/v1"
 project = "forge"
 version = "0.9.0"
-active_milestone = "G2"
+active_milestone = "A1"
 bar = "above-samp"
-visual_target = "gta-iv / sleeping-dogs class"
+visual_target = "technical baseline inspired by gta-iv / sleeping-dogs"
 
 # status: todo | doing | done | blocked
 # close a task: python3 scripts/progress.py close <id>
@@ -58,6 +58,11 @@ status = "done"
 [[milestones]]
 id = "G2"
 title = "Inventory and survival economy"
+status = "done"
+
+[[milestones]]
+id = "A1"
+title = "Architecture boundaries"
 status = "done"
 
 [[tasks]]
@@ -425,13 +430,79 @@ id = "g2-als-cmc"
 milestone = "G2"
 status = "done"
 title = "Replace Source movement with ALS-Refactored CMC 1:1 and Mixamo ALS mannequin"
+
+[[tasks]]
+id = "g2-stakes"
+milestone = "G2"
+status = "done"
+title = "Session stakes: cargo extract, death loot/respawn, melee, burning campfires"
+
+[[tasks]]
+id = "g2-net-layers"
+milestone = "G2"
+status = "done"
+title = "Split net into transport (socket/stream/connection/channel) and game replication"
+
+[[tasks]]
+id = "a1-rhi-render"
+milestone = "A1"
+status = "done"
+title = "Move HDR/bloom/ACES out of RHI into render::Renderer"
+
+[[tasks]]
+id = "a1-framegraph"
+milestone = "A1"
+status = "done"
+title = "Minimal FrameGraph for shadow/opaque/bloom/tonemap/UI resource edges"
+
+[[tasks]]
+id = "a1-resources"
+milestone = "A1"
+status = "done"
+title = "GPU resource handles and central lifetime in rhi::Resources"
+
+[[tasks]]
+id = "a1-world-auth"
+milestone = "A1"
+status = "done"
+title = "Authoritative game::Actors/World; Lua only calls into them"
+
+[[tasks]]
+id = "a1-prediction"
+milestone = "A1"
+status = "done"
+title = "Client prediction, snapshot interpolation, reconciliation"
+
+[[tasks]]
+id = "a1-anim-lib"
+milestone = "A1"
+status = "done"
+title = "Split forge_anim from forge_assets; KTX2 decode in assets"
+
+[[tasks]]
+id = "a1-protocol"
+milestone = "A1"
+status = "done"
+title = "Versioned packets, packet budget, unordered-reliable contract, validation"
+
+[[tasks]]
+id = "a1-core"
+milestone = "A1"
+status = "done"
+title = "Categorized log, profiler, jobs, tick clocks"
+
+[[tasks]]
+id = "a1-layers"
+milestone = "A1"
+status = "done"
+title = "Frontend split, asset manager, audio/save slots, streaming residency"
 +++
 
 # Forge
 
 Свой 3D-движок. Не Unity, не Godot, не форк GTA.
 
-**Планка:** выше SA-MP. **Цель по картинке:** GTA IV / Sleeping Dogs — PBR, каскадные тени, HDR, скелеты. Не Doom и не Unreal 5.
+**Планка:** выше SA-MP. **Технический baseline** (не равенство картинки): GTA IV / Sleeping Dogs class — forward PBR, CSM, HDR, IBL, ACES. Не Doom и не Unreal 5.
 
 **Стек:** C++20 · SDL3 GPU (Metal / DX12 / Vulkan) · GLM · cgltf · libktx · Jolt · Lua 5.4.
 
@@ -654,6 +725,20 @@ Smoke использует временный файл настроек и не 
 - [x] `g2-gamemovement` — шутерная локомоция по Source: accelerate/friction, кэпы wish, воздух как в CS
 - [x] `g2-als-locomotion` — ядро ALS-Refactored: gait-машина, конус спринта, шаг под анимацию, lean, mantle
 - [x] `g2-als-cmc` — физика ALS-Refactored CMC 1:1 вместо Source и маннекен Mixamo вместо космонавта
+- [x] `g2-stakes` — ставки сессии: эвакуация за 4 слитка, смерть с лутом и респавном, ближний бой, костёр сгорает
+- [x] `g2-net-layers` — сеть: транспорт socket/stream/connection/channel и репликация в engine/game/net
+
+### A1 Architecture boundaries
+
+- [x] `a1-rhi-render` — HDR/bloom/ACES живут в `render::Renderer`, не в `rhi::Host`
+- [x] `a1-framegraph` — минимальный FrameGraph: shadow/opaque/bloom/tonemap/UI
+- [x] `a1-resources` — Texture/Buffer/Sampler/Pipeline handles и `rhi::Resources`
+- [x] `a1-world-auth` — источник правды `game::Actors` + `game::Sim`; Lua только API
+- [x] `a1-prediction` — prediction / interpolation / reconciliation на клиенте
+- [x] `a1-anim-lib` — `forge_anim` отдельно от ассетов; KTX2 decode в `assets/`
+- [x] `a1-protocol` — budget константы, расширенный Packet enum, unordered reliable
+- [x] `a1-core` — каналы лога, profiler, jobs, фиксированные тики sim/net
+- [x] `a1-layers` — frontend/, AssetManager, audio/save слоты, residency секторов
 
 **Управление:** Tab или I открывает две вкладки «Инвентарь» / «Крафты», Escape закрывает их.
 Мир в меню продолжает симулироваться; движение и поворот камеры блокируются.
