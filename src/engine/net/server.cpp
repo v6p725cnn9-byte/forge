@@ -1,6 +1,7 @@
 #include "engine/net/server.hpp"
 
 #include "engine/net/interest.hpp"
+#include "engine/phys/als.hpp"
 
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -10,7 +11,19 @@
 namespace forge::net {
 namespace {
 constexpr auto kTimeout = std::chrono::seconds(3);
+constexpr float kCapsuleRadius = forge::phys::als::kCapsuleRadius;
+constexpr float kCapsuleHalfHeight = forge::phys::als::kCylinderHalfHeight;
+// The registry tracks each pawn by a center 1 m above the feet, while Jolt
+// reports the capsule center, which rests half-height + radius above them.
+constexpr float kCapsuleRest = kCapsuleHalfHeight + kCapsuleRadius;
+constexpr float kCenterOffset = 1.0f - kCapsuleRest;
+static_assert(kCenterOffset > 0.0f, "pawn center must sit above the capsule center");
+
+bool valid_player(int player_id)
+{
+    return player_id >= 0 && player_id < script::kMaxPlayers;
 }
+} // namespace
 
 bool Server::listen(std::uint16_t port, bool lan)
 {
@@ -24,10 +37,94 @@ void Server::close()
     for (const auto& peer : peers_) {
         if (world_) world_->destroy_player(peer.player_id);
         if (sim_) sim_->remove_pawn(peer.player_id);
+        drop_body(peer.player_id);
     }
+    if (physics_ready_) {
+        for (int box : static_boxes_) physics_.remove_box(box);
+    }
+    static_boxes_.clear();
+    static_synced_ = false;
     peers_.clear();
     tick_ = 0;
     accumulator_ = 0;
+}
+
+void Server::ensure_physics()
+{
+    if (physics_ready_) return;
+    if (!physics_.init()) return;
+    physics_.add_box({0.0f, -0.5f, 40.0f}, {90.0f, 0.5f, 100.0f});
+    physics_ready_ = true;
+}
+
+void Server::sync_statics()
+{
+    if (!physics_ready_ || !sim_) return;
+    const auto& nodes = sim_->nodes();
+    std::size_t signature = nodes.size() + 1;
+    for (const auto& node : nodes) {
+        std::size_t part = static_cast<std::size_t>(static_cast<int>(node.kind) * 2 + (node.alive ? 1 : 0));
+        const int qx = static_cast<int>(node.position.x * 4.0f);
+        const int qz = static_cast<int>(node.position.z * 4.0f);
+        part = part * 1315423911u + static_cast<std::size_t>(qx * 73 + qz * 193);
+        signature ^= part + 0x9e3779b9u + (signature << 6) + (signature >> 2);
+    }
+    if (static_synced_ && signature == static_signature_) return;
+    for (int box : static_boxes_) physics_.remove_box(box);
+    static_boxes_.clear();
+    for (const auto& node : nodes) {
+        if (!node.alive) continue;
+        const float x = node.position.x;
+        const float z = node.position.z;
+        switch (node.kind) {
+        case game::NodeKind::Tree:
+            static_boxes_.push_back(physics_.add_box({x, 2.0f, z}, {0.35f, 2.0f, 0.35f}));
+            break;
+        case game::NodeKind::Rock:
+            static_boxes_.push_back(physics_.add_box({x, 0.6f, z}, {0.8f, 0.6f, 0.8f}));
+            break;
+        case game::NodeKind::IronOre:
+            static_boxes_.push_back(physics_.add_box({x, 1.0f, z}, {0.8f, 1.0f, 0.8f}));
+            break;
+        case game::NodeKind::Campfire:
+            static_boxes_.push_back(physics_.add_box({x, 0.3f, z}, {0.6f, 0.3f, 0.6f}));
+            break;
+        case game::NodeKind::Furnace:
+        case game::NodeKind::Bench:
+            static_boxes_.push_back(physics_.add_box({x, 0.5f, z}, {0.6f, 0.5f, 0.6f}));
+            break;
+        case game::NodeKind::Extract:
+            static_boxes_.push_back(physics_.add_box({x, 1.6f, z}, {0.6f, 1.6f, 0.6f}));
+            break;
+        default:
+            break;
+        }
+    }
+    static_boxes_.erase(std::remove(static_boxes_.begin(), static_boxes_.end(), -1), static_boxes_.end());
+    static_signature_ = signature;
+    static_synced_ = true;
+}
+
+int Server::body_for(int player_id)
+{
+    if (!valid_player(player_id) || !physics_ready_ || !world_) return -1;
+    int body = bodies_[static_cast<std::size_t>(player_id)];
+    if (body >= 0) return body;
+    const auto* player = world_->player(player_id);
+    if (!player) return -1;
+    body = physics_.spawn_character(player->position - glm::vec3{0.0f, kCenterOffset, 0.0f}, kCapsuleRadius,
+                                    kCapsuleHalfHeight);
+    bodies_[static_cast<std::size_t>(player_id)] = body;
+    return body;
+}
+
+void Server::drop_body(int player_id)
+{
+    if (!valid_player(player_id)) return;
+    const int body = bodies_[static_cast<std::size_t>(player_id)];
+    if (body < 0) return;
+    if (physics_ready_) physics_.remove_character(body);
+    bodies_[static_cast<std::size_t>(player_id)] = -1;
 }
 
 void Server::attach(script::Registry& world) { world_ = &world; }
@@ -62,6 +159,9 @@ bool Server::accept(const Address& address)
     if (id < 0) return false;
     if (auto* player = world_->player(id)) player->name = "Player" + std::to_string(id);
     if (sim_) sim_->ensure_pawn(id);
+    ensure_physics();
+    drop_body(id);
+    body_for(id);
     Peer peer;
     peer.address = address;
     peer.player_id = id;
@@ -80,6 +180,7 @@ void Server::poll()
         if (now - peer.last_recv <= kTimeout) return false;
         if (world_) world_->destroy_player(peer.player_id);
         if (sim_) sim_->remove_pawn(peer.player_id);
+        drop_body(peer.player_id);
         return true;
     });
     std::uint8_t buffer[kMaxPacket + 1];
@@ -120,8 +221,10 @@ void Server::poll()
 void Server::simulate(float dt)
 {
     if (!world_) return;
+    ensure_physics();
+    sync_statics();
     for (auto& peer : peers_) {
-        if (peer.player_id < 0) continue;
+        if (!valid_player(peer.player_id)) continue;
         auto* player = world_->player(peer.player_id);
         if (!player) continue;
         if (peer.pending_action.action != game::Action::None) {
@@ -129,9 +232,16 @@ void Server::simulate(float dt)
             peer.action_ack = peer.pending_action.action_seq;
             peer.pending_action = {};
         }
+        const int body = body_for(peer.player_id);
+        if (body >= 0) physics_.set_character_facing(body, peer.input.yaw);
         const auto* pawn = sim_ ? sim_->pawn(peer.player_id) : nullptr;
-        if (sim_ && sim_->phase() != game::Phase::Play) continue;
-        if (pawn && (pawn->extracted || pawn->hp <= 0.0f)) continue;
+        const bool controllable =
+            body >= 0 && (!sim_ || sim_->phase() == game::Phase::Play) && (!pawn || (!pawn->extracted && pawn->hp > 0.0f));
+        if (!controllable) {
+            if (body >= 0) physics_.set_character_input(body, glm::vec3{0.0f}, false, 0.0f);
+            if (body >= 0) player->yaw = physics_.character_yaw(body);
+            continue;
+        }
         glm::vec3 move{peer.input.move_x, 0.0f, peer.input.move_z};
         const float length = glm::length(glm::vec2(move.x, move.z));
         if (length > 1.0f) move /= length;
@@ -143,27 +253,32 @@ void Server::simulate(float dt)
                 want_boost = want_boost && pawn->stamina > 1.0f;
             }
         }
+        if (length <= 0.05f) move = glm::vec3{0.0f};
+        float top = game::kRunGaitSpeed;
         if (length > 0.05f) {
-            const float speed = want_boost ? 9.0f : 5.5f;
-            player->position += move * speed * dt;
-
+            if (want_boost && game::sprint_cone(move, peer.input.yaw)) top = game::kSprintGaitSpeed;
+            else if (pawn && pawn->stamina <= 1.0f) top = game::kWalkGaitSpeed;
         }
-        player->yaw = peer.input.yaw;
-        // Plain projectile gravity; the pawn center rests 1 m above the feet.
-        constexpr float kGroundY = 1.0f;
-        constexpr float kGravity = 16.0f;
-        constexpr float kJumpSpeed = 6.0f;
-        const bool grounded = player->position.y <= kGroundY + 1e-4f;
-        if (grounded && peer.input.jump) peer.vertical_velocity = kJumpSpeed;
-        if (!grounded || peer.vertical_velocity != 0.0f) {
-            peer.vertical_velocity -= kGravity * dt;
-            player->position.y += peer.vertical_velocity * dt;
-            if (player->position.y <= kGroundY) {
-                player->position.y = kGroundY;
-                peer.vertical_velocity = 0.0f;
-            }
-        } else {
-            player->position.y = kGroundY;
+        const bool vaulted = peer.input.jump && length > 0.3f && physics_.try_mantle(body, move);
+        physics_.set_character_input(body, move, peer.input.jump && !vaulted, top);
+    }
+
+    if (physics_ready_) {
+        constexpr int kSubsteps = 2;
+        const float sub = dt / static_cast<float>(kSubsteps);
+        for (int i = 0; i < kSubsteps; ++i) physics_.tick(sub);
+    }
+    for (auto& peer : peers_) {
+        if (!valid_player(peer.player_id)) continue;
+        auto* player = world_->player(peer.player_id);
+        if (!player) continue;
+        const int body = bodies_[static_cast<std::size_t>(peer.player_id)];
+        if (body >= 0 && physics_ready_) {
+            player->position = physics_.character_position(body) + glm::vec3{0.0f, kCenterOffset, 0.0f};
+            player->yaw = physics_.character_yaw(body);
+            const glm::vec3 move{peer.input.move_x, 0.0f, peer.input.move_z};
+            if (!physics_.character_supported(body) && glm::length(glm::vec2(move.x, move.z)) > 0.3f)
+                physics_.try_mantle(body, move);
         }
         if (sim_ && peer.pending_interact) {
             sim_->harvest(peer.player_id, *world_);

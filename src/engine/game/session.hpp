@@ -4,10 +4,30 @@
 #include "engine/game/items.hpp"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
 namespace forge::game {
+
+// ALS-Refactored gaits from FAlsMovementGaitSettings / MS_Als_Normal (cm -> m).
+enum class Gait : std::uint8_t { Walk, Run, Sprint };
+
+constexpr float kWalkGaitSpeed = 1.75f;
+constexpr float kRunGaitSpeed = 3.75f;
+constexpr float kSprintGaitSpeed = 6.50f;
+
+// AAlsCharacter::CanSprint: input must sit inside a 50-degree yaw cone of the view.
+inline bool sprint_cone(glm::vec3 move, float yaw_degrees)
+{
+    const glm::vec2 flat{move.x, move.z};
+    const float length = glm::length(flat);
+    if (length <= 0.05f) return false;
+    const float yaw = glm::radians(yaw_degrees);
+    const glm::vec2 forward{std::sin(yaw), std::cos(yaw)};
+    return glm::dot(flat / length, forward) > std::cos(glm::radians(50.0f));
+}
 
 enum class NodeKind : std::uint8_t { Tree = 1, Rock = 2, Campfire = 3, Extract = 4, Stick, Pebble, Flint, Fiber, IronOre, Furnace, Bench };
 

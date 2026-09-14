@@ -97,5 +97,11 @@ int main()
 
     check(forge::net::xz_distance({0, 0, 0}, {0, 5, 92}) > 70.0f, "far tree is outside default stream");
 
+    check(forge::game::sprint_cone({0, 0, 1}, 0.0f), "sprint cone allows forward sprint");
+    check(!forge::game::sprint_cone({0, 0, -1}, 0.0f), "sprint cone denies backpedal sprint");
+    check(!forge::game::sprint_cone({1, 0, 0}, 0.0f), "sprint cone denies strafe sprint");
+    check(!forge::game::sprint_cone({0, 0, 0}, 0.0f), "idle never sprints");
+    check(forge::game::sprint_cone({0, 0, -1}, 180.0f), "sprint cone follows the facing yaw");
+
     std::cout << "Survival checks passed\n";
 }

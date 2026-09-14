@@ -159,4 +159,23 @@ bool evaluate(const assets::Scene& scene, int skin, int clip, float time, Palett
     return compute_palette(scene, skin, globals, out);
 }
 
+float stride_speed(const assets::Scene& scene, int node, int clip)
+{
+    if (node < 0 || node >= static_cast<int>(scene.nodes.size())) return 0.0f;
+    if (clip < 0 || clip >= static_cast<int>(scene.animations.size())) return 0.0f;
+    const float duration = scene.animations[static_cast<std::size_t>(clip)].duration;
+    if (duration <= 1e-4f) return 0.0f;
+    std::vector<glm::vec3> translation, scale;
+    std::vector<glm::quat> rotation;
+    std::vector<glm::mat4> globals;
+    const auto hip_at = [&](float time) {
+        sample_clip(scene, clip, time, translation, rotation, scale);
+        compute_globals(scene, translation, rotation, scale, globals);
+        return glm::vec3(globals[static_cast<std::size_t>(node)][3]);
+    };
+    const float end = duration * (1.0f - 1e-3f);
+    const glm::vec3 delta = hip_at(end) - hip_at(0.0f);
+    return glm::length(glm::vec2(delta.x, delta.z)) / end;
+}
+
 } // namespace forge::anim

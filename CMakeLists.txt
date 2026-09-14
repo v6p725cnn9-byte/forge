@@ -157,7 +157,7 @@ target_compile_definitions(forge_engine PUBLIC
     FORGE_GPU_DEBUG=$<IF:$<CONFIG:Debug>,1,0>
 )
 
-add_library(forge_physics STATIC src/engine/phys/world.cpp)
+add_library(forge_physics STATIC src/engine/phys/world.cpp src/engine/phys/als.cpp)
 target_include_directories(forge_physics PUBLIC src)
 target_link_libraries(forge_physics PUBLIC Jolt glm::glm)
 
@@ -191,7 +191,7 @@ add_library(forge_net STATIC
     src/engine/net/client.cpp
 )
 target_include_directories(forge_net PUBLIC src)
-target_link_libraries(forge_net PUBLIC forge_script forge_game glm::glm)
+target_link_libraries(forge_net PUBLIC forge_script forge_game forge_physics glm::glm)
 if(WIN32)
     target_link_libraries(forge_net PUBLIC ws2_32)
 endif()
@@ -215,8 +215,8 @@ add_custom_target(forge_shaders ALL
 
 add_custom_target(forge_stage_runtime
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets/models/Astronaut
-        ${CMAKE_BINARY_DIR}/assets/models/Astronaut
+        ${CMAKE_SOURCE_DIR}/assets/models/Als
+        ${CMAKE_BINARY_DIR}/assets/models/Als
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets/models/Nature
         ${CMAKE_BINARY_DIR}/assets/models/Nature
@@ -346,6 +346,10 @@ if(BUILD_TESTING)
     add_executable(survival_tests tests/survival_tests.cpp)
     target_link_libraries(survival_tests PRIVATE forge_net)
     add_test(NAME survival COMMAND survival_tests)
+
+    add_executable(phys_tests tests/phys_tests.cpp)
+    target_link_libraries(phys_tests PRIVATE forge_physics)
+    add_test(NAME phys COMMAND phys_tests)
 
     add_executable(settings_tests tests/settings_tests.cpp)
     target_link_libraries(settings_tests PRIVATE forge_engine)

@@ -22,6 +22,10 @@ void compute_globals(const assets::Scene& scene, const std::vector<glm::vec3>& t
                      std::vector<glm::mat4>& globals);
 bool compute_palette(const assets::Scene& scene, int skin, const std::vector<glm::mat4>& globals, Palette& out);
 bool evaluate(const assets::Scene& scene, int skin, int clip, float time, Palette& out);
+// Horizontal speed of a node over one clip cycle (stride length / duration),
+// used to match playback rate to capsule speed so feet stop sliding.
+// Returns 0 when the clip carries no root travel.
+float stride_speed(const assets::Scene& scene, int node, int clip);
 // Collapse a joint's skinning matrix onto the joint center so attached triangles
 // degenerate and cull away. Used for a headless first-person body: legs and torso
 // stay visible, the head no longer blocks the eye camera.

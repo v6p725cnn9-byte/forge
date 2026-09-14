@@ -1,0 +1,11 @@
+Mannequin.glb
+  Mixamo X Bot (Beta) mannequin from three.js r170 examples/models/gltf/Xbot.glb
+  https://github.com/mrdoob/three.js/blob/r170/examples/models/gltf/Xbot.glb
+  Clips: idle, walk, run (plus agree, headShake, sad_pose, sneak_pose).
+  Mixamo characters are royalty-free for use in games (Adobe Mixamo terms).
+  Stand-in for ALS-Refactored SKM_Als, which ships only as an Unreal .uasset.
+
+ALS-Refactored (movement numbers, gait, mantle, capsule)
+  https://github.com/Sixze/ALS-Refactored
+  MIT License. Copyright (c) Sixze, Caleb Longmire, Doğa Can Yanıkoğlu,
+  and Advanced Locomotion System Refactored contributors.

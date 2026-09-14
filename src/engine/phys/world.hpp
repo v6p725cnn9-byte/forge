@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <memory>
 
 namespace forge::phys {
@@ -13,15 +14,30 @@ public:
     World& operator=(const World&) = delete;
 
     bool init();
-    void add_box(glm::vec3 center, glm::vec3 half_extents);
-    void spawn_character(glm::vec3 position, float radius, float half_height);
+    int add_box(glm::vec3 center, glm::vec3 half_extents);
+    void remove_box(int box);
+    int spawn_character(glm::vec3 position, float radius, float half_height);
+    void remove_character(int character);
     bool spawn_vehicle(glm::vec3 position, float yaw_degrees = 0.0f);
     void set_character_enabled(bool enabled);
+    void set_character_enabled(int character, bool enabled);
     void warp_character(glm::vec3 position);
+    void warp_character(int character, glm::vec3 position);
+    // ALS StartMantling traces. Starts a short locked climb; the capsule
+    // reaches the ledge over kMantleLowSeconds / High / Air.
+    bool try_mantle(int character, glm::vec3 wish_dir_xz);
+    void set_character_input(int character, glm::vec3 walk_xz, bool jump, float speed = 3.75f);
+    // View yaw (camera). Actor yaw is owned by ALS rotation.
+    void set_character_facing(int character, float yaw_degrees);
     void set_vehicle_input(float forward, float steer, float brake);
     void tick(float dt, glm::vec3 walk_xz, bool jump);
+    void tick(float dt);
     glm::vec3 character_position() const;
+    glm::vec3 character_position(int character) const;
+    float character_yaw() const;
+    float character_yaw(int character) const;
     bool character_supported() const;
+    bool character_supported(int character) const;
     glm::mat4 vehicle_transform() const;
     glm::mat4 wheel_transform(int index) const;
     glm::vec3 vehicle_position() const;

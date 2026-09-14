@@ -3,8 +3,10 @@
 #include "engine/game/session.hpp"
 #include "engine/net/protocol.hpp"
 #include "engine/net/socket.hpp"
+#include "engine/phys/world.hpp"
 #include "engine/script/registry.hpp"
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <vector>
@@ -33,7 +35,6 @@ private:
         std::uint32_t last_seq = 0;
         bool pending_interact = false;
         bool pending_place = false;
-        float vertical_velocity = 0.0f;
         std::uint32_t action_ack = 0;
         Input pending_action{};
         std::chrono::steady_clock::time_point last_recv{};
@@ -44,6 +45,10 @@ private:
     void broadcast();
     Peer* find_peer(const Address& address);
     bool accept(const Address& address);
+    void ensure_physics();
+    void sync_statics();
+    int body_for(int player_id);
+    void drop_body(int player_id);
 
     Udp socket_;
     script::Registry* world_ = nullptr;
@@ -52,6 +57,16 @@ private:
     std::uint32_t tick_ = 0;
     float stream_radius_ = kDefaultStreamRadius;
     float accumulator_ = 0;
+    phys::World physics_;
+    bool physics_ready_ = false;
+    std::array<int, script::kMaxPlayers> bodies_ = [] {
+        std::array<int, script::kMaxPlayers> ids{};
+        ids.fill(-1);
+        return ids;
+    }();
+    std::vector<int> static_boxes_;
+    std::size_t static_signature_ = 0;
+    bool static_synced_ = false;
 };
 
 } // namespace forge::net

@@ -25,6 +25,8 @@ private:
         std::uint32_t tick = 0;
         glm::vec3 target{0};
         glm::vec3 position{0};
+        glm::vec3 vel{0};
+        glm::vec2 lean{0};
         float yaw = 0;
         float speed = 0;
         int clip = -1;
@@ -42,14 +44,14 @@ private:
     int head_joint_ = -1;
     glm::mat4 hip_bind_{1};
     glm::vec3 hip_origin_{0};
-    PbrScene astronaut_;
+    PbrScene character_;
     std::array<PbrScene, 3> trees_;
     PbrScene rock_;
     PbrScene campfire_;
     PbrScene flame_;
     std::array<PbrScene, 10> supplies_;
     std::array<glm::mat4, 10> supply_transforms_{};
-    glm::mat4 astronaut_transform_{1};
+    glm::mat4 character_transform_{1};
     std::array<glm::mat4, 3> tree_transforms_{};
     glm::mat4 rock_transform_{1};
     glm::mat4 fire_transform_{1};
@@ -61,6 +63,8 @@ private:
     int walk_ = -1;
     int run_ = -1;
     int interact_ = -1;
+    float walk_stride_ = 0.0f;
+    float run_stride_ = 0.0f;
     float clock_ = 0;
     std::uint32_t triangles_ = 0;
 };

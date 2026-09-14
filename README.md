@@ -395,6 +395,36 @@ id = "g2-models"
 milestone = "G2"
 status = "done"
 title = "CC0 tools, resources and crafting station models"
+
+[[tasks]]
+id = "g2-server-physics"
+milestone = "G2"
+status = "done"
+title = "Authoritative server physics: Jolt statics, character blocking and host-side jump"
+
+[[tasks]]
+id = "g2-locomotion"
+milestone = "G2"
+status = "done"
+title = "Research-backed locomotion: directional caps, force-velocity accel, braking, ballistic air"
+
+[[tasks]]
+id = "g2-gamemovement"
+milestone = "G2"
+status = "done"
+title = "Shooter locomotion after Source: accelerate/friction, directional wish caps, CS-style air"
+
+[[tasks]]
+id = "g2-als-locomotion"
+milestone = "G2"
+status = "done"
+title = "ALS-Refactored core: gait machine, sprint cone, stride-matched anim, lean, mantle"
+
+[[tasks]]
+id = "g2-als-cmc"
+milestone = "G2"
+status = "done"
+title = "Replace Source movement with ALS-Refactored CMC 1:1 and Mixamo ALS mannequin"
 +++
 
 # Forge
@@ -619,6 +649,11 @@ Smoke использует временный файл настроек и не 
 - [x] `g2-economy` — предметы, добыча руками/инструментом, прочность, ремонт, печь и железные инструменты
 - [x] `g2-inventory-ui` — вкладки инвентаря и крафта, вес, экипировка и подтверждение серверных действий
 - [x] `g2-models` — модели ресурсов, инструментов и станций Kenney Survival Kit (CC0)
+- [x] `g2-server-physics` — авторитетная физика сервера: статика Jolt, блокировка персонажа и прыжок на хосте
+- [x] `g2-locomotion` — локомоция по исследованиям: кэпы по направлениям, разгон force-velocity, торможение, баллистика в воздухе
+- [x] `g2-gamemovement` — шутерная локомоция по Source: accelerate/friction, кэпы wish, воздух как в CS
+- [x] `g2-als-locomotion` — ядро ALS-Refactored: gait-машина, конус спринта, шаг под анимацию, lean, mantle
+- [x] `g2-als-cmc` — физика ALS-Refactored CMC 1:1 вместо Source и маннекен Mixamo вместо космонавта
 
 **Управление:** Tab или I открывает две вкладки «Инвентарь» / «Крафты», Escape закрывает их.
 Мир в меню продолжает симулироваться; движение и поворот камеры блокируются.

@@ -4,7 +4,9 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <initializer_list>
 #include <string>
 
 namespace forge::render {
@@ -63,10 +65,38 @@ assets::Scene fire_billboard()
     return scene;
 }
 
+std::string lower(std::string_view text)
+{
+    std::string out(text);
+    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+std::string joint_leaf(std::string_view name)
+{
+    const auto colon = name.find_last_of(":/");
+    return lower(colon == std::string_view::npos ? name : name.substr(colon + 1));
+}
+
 int named_clip(const assets::Scene& scene, const char* name)
 {
+    const std::string want = lower(name);
     for (std::size_t i = 0; i < scene.animations.size(); ++i)
-        if (scene.animations[i].name == name) return static_cast<int>(i);
+        if (lower(scene.animations[i].name) == want) return static_cast<int>(i);
+    return -1;
+}
+
+int named_joint(const assets::Scene& scene, const assets::Skin& skin, std::initializer_list<const char*> names)
+{
+    for (const char* name : names) {
+        const std::string want = lower(name);
+        for (std::size_t j = 0; j < skin.joints.size(); ++j) {
+            const int node = skin.joints[j];
+            if (node < 0 || node >= static_cast<int>(scene.nodes.size())) continue;
+            if (joint_leaf(scene.nodes[static_cast<std::size_t>(node)].name) == want)
+                return static_cast<int>(j);
+        }
+    }
     return -1;
 }
 
@@ -77,25 +107,21 @@ bool SurvivalVisuals::create(rhi::Host& host)
     std::string error;
     const auto models = assets_directory() / "models";
     assets::Scene source;
-    if (!assets::load_gltf(models / "Astronaut/Astronaut.glb", source, error)) {
-        SDL_Log("Astronaut load failed: %s", error.c_str());
+    if (!assets::load_gltf(models / "Als/Mannequin.glb", source, error)) {
+        SDL_Log("ALS mannequin load failed: %s", error.c_str());
         return false;
     }
-    const int source_walk = named_clip(source, "Walk");
+    const int source_walk = named_clip(source, "walk");
     anim::Palette initial_pose;
-    const glm::mat4 facing = glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3{0, 1, 0});
     glm::vec3 posed_min{0}, posed_max{0};
     bool have_bounds = false;
     if (!source.skins.empty() && anim::evaluate(source, 0, source_walk, 0, initial_pose)) {
         const auto& skin = source.skins[0];
-        for (std::size_t j = 0; j < skin.joints.size(); ++j) {
-            if (source.nodes[static_cast<std::size_t>(skin.joints[j])].name == "Hip") {
-                hip_joint_ = static_cast<int>(j);
-                hip_bind_ = glm::inverse(skin.inverse_bind[j]);
-                hip_origin_ = glm::vec3(initial_pose.joints[j] * hip_bind_ * glm::vec4{0, 0, 0, 1});
-            }
-            if (source.nodes[static_cast<std::size_t>(skin.joints[j])].name == "Head")
-                head_joint_ = static_cast<int>(j);
+        hip_joint_ = named_joint(source, skin, {"Hips", "Hip", "pelvis"});
+        head_joint_ = named_joint(source, skin, {"Head"});
+        if (hip_joint_ >= 0) {
+            hip_bind_ = glm::inverse(skin.inverse_bind[static_cast<std::size_t>(hip_joint_)]);
+            hip_origin_ = glm::vec3(initial_pose.joints[hip_joint_] * hip_bind_ * glm::vec4{0, 0, 0, 1});
         }
         // Bounds must be measured after skinning: raw mesh coordinates are not the posed character.
         for (const auto& vertex : source.vertices) {
@@ -107,42 +133,49 @@ bool SurvivalVisuals::create(rhi::Host& host)
                 weight += vertex.weights[j];
             }
             if (weight < 0.00001f) point = glm::vec4(vertex.position, 1);
-            const glm::vec3 position = glm::vec3(facing * point);
+            const glm::vec3 position = glm::vec3(point);
             if (!have_bounds) { posed_min = posed_max = position; have_bounds = true; }
             posed_min = glm::min(posed_min, position);
             posed_max = glm::max(posed_max, position);
         }
     }
-    if (!astronaut_.ingest(host.device(), std::move(source), "Astronaut", error)) {
-        SDL_Log("Astronaut upload failed: %s", error.c_str());
+    if (!character_.ingest(host.device(), std::move(source), "ALS mannequin", error)) {
+        SDL_Log("ALS mannequin upload failed: %s", error.c_str());
         return false;
     }
-    const auto& character = astronaut_.cpu();
-    idle_ = named_clip(character, "Idle_Neutral");
-    walk_ = named_clip(character, "Walk");
-    run_ = named_clip(character, "Run");
+    const auto& character = character_.cpu();
+    idle_ = named_clip(character, "idle");
+    walk_ = named_clip(character, "walk");
+    run_ = named_clip(character, "run");
     if (run_ < 0) run_ = walk_;
-    interact_ = named_clip(character, "Interact");
-    astronaut_transform_ = grounded(astronaut_, 1.85f);
+    interact_ = named_clip(character, "interact");
+    character_transform_ = grounded(character_, 1.80f);
     if (have_bounds) {
-        const float scale = 1.85f / std::max(posed_max.y - posed_min.y, 0.001f);
+        const float scale = 1.80f / std::max(posed_max.y - posed_min.y, 0.001f);
         const glm::vec3 base{(posed_min.x + posed_max.x) * 0.5f, posed_min.y,
                              (posed_min.z + posed_max.z) * 0.5f};
-        astronaut_transform_ = glm::scale(glm::mat4(1), glm::vec3{scale})
-            * glm::translate(glm::mat4(1), -base) * facing;
+        character_transform_ = glm::scale(glm::mat4(1), glm::vec3{scale}) * glm::translate(glm::mat4(1), -base);
+    }
+    if (!character.skins.empty() && hip_joint_ >= 0
+        && hip_joint_ < static_cast<int>(character.skins[0].joints.size())) {
+        const int hip_node = character.skins[0].joints[static_cast<std::size_t>(hip_joint_)];
+        const float model_scale = glm::length(glm::vec3(character_transform_[0]));
+        if (walk_ >= 0) walk_stride_ = anim::stride_speed(character, hip_node, walk_) * model_scale;
+        if (run_ >= 0) run_stride_ = anim::stride_speed(character, hip_node, run_) * model_scale;
+        SDL_Log("Locomotion stride: walk %.2f m/s, run %.2f m/s", walk_stride_, run_stride_);
     }
 
     const std::array<const char*, 3> trees{"tree_default.glb", "tree_pineTallA.glb", "tree_pineRoundC.glb"};
     for (std::size_t i = 0; i < trees.size(); ++i) {
-        if (!load_prop(trees_[i], host.device(), models / "Nature" / trees[i], error, astronaut_.lighting())) {
+        if (!load_prop(trees_[i], host.device(), models / "Nature" / trees[i], error, character_.lighting())) {
             SDL_Log("Tree load failed: %s", error.c_str());
             return false;
         }
         tree_transforms_[i] = grounded(trees_[i], i == 1 ? 6.2f : 4.8f);
     }
-    if (!load_prop(rock_, host.device(), models / "Nature/rock_largeA.glb", error, astronaut_.lighting())
-        || !load_prop(campfire_, host.device(), models / "Campfire/campfire-pit.glb", error, astronaut_.lighting())
-        || !flame_.ingest(host.device(), fire_billboard(), "Kenney fire particle", error, astronaut_.lighting())) {
+    if (!load_prop(rock_, host.device(), models / "Nature/rock_largeA.glb", error, character_.lighting())
+        || !load_prop(campfire_, host.device(), models / "Campfire/campfire-pit.glb", error, character_.lighting())
+        || !flame_.ingest(host.device(), fire_billboard(), "Kenney fire particle", error, character_.lighting())) {
         SDL_Log("Survival prop load failed: %s", error.c_str());
         return false;
     }
@@ -150,7 +183,7 @@ bool SurvivalVisuals::create(rhi::Host& host)
         "resource-wood", "resource-stone", "resource-stone-large", "grass", "workbench", "barrel-open"}};
     const std::array<float,10> heights{{.75f,.85f,.75f,.85f,.22f,.20f,1.15f,.45f,1.0f,1.15f}};
     for (std::size_t i = 0; i < supplies.size(); ++i) {
-        if (!load_prop(supplies_[i],host.device(),models / "SurvivalKit" / (std::string(supplies[i])+".glb"),error,astronaut_.lighting())) {
+        if (!load_prop(supplies_[i],host.device(),models / "SurvivalKit" / (std::string(supplies[i])+".glb"),error,character_.lighting())) {
             SDL_Log("Supply model failed: %s",error.c_str());
             return false;
         }
@@ -162,7 +195,7 @@ bool SurvivalVisuals::create(rhi::Host& host)
     double_sided_ = make_pbr_pipeline(host, true);
     skinned_ = make_pbr_skinned_pipeline(host, true);
     if (!pbr_ || !double_sided_ || !skinned_) return false;
-    SDL_Log("Survival assets ready: user character (%zu skins, %zu clips), trees, campfire and rock",
+    SDL_Log("Survival assets ready: ALS mannequin (%zu skins, %zu clips), trees, campfire and rock",
             character.skins.size(), character.animations.size());
     return true;
 }
@@ -178,14 +211,15 @@ void SurvivalVisuals::remove_root_motion(anim::Palette& palette) const
 
 void SurvivalVisuals::animate(PlayerVisual& player, float dt)
 {
-    const auto& scene = astronaut_.cpu();
+    const auto& scene = character_.cpu();
     if (scene.skins.empty()) return;
     if (scene.animations.empty()) {
         anim::evaluate(scene, 0, -1, 0.0f, player.palette);
         remove_root_motion(player.palette);
         return;
     }
-    const int next = player.action_left > 0 ? interact_ : (player.speed > 7.0f ? run_ : (player.speed > 0.2f ? walk_ : idle_));
+    const int next = player.action_left > 0 ? interact_
+        : (player.speed > 3.85f ? run_ : (player.speed > 0.50f ? walk_ : idle_));
     if (next < 0) {
         // Until an idle clip is supplied, hold the first authored walking pose.
         anim::evaluate(scene, 0, walk_, 0.0f, player.palette);
@@ -201,8 +235,15 @@ void SurvivalVisuals::animate(PlayerVisual& player, float dt)
         player.time = 0;
         player.blend = player.previous_clip < 0 ? 1.0f : 0.0f;
     }
-    player.time += dt;
-    player.previous_time += dt;
+    // ALS-style stride matching: run the cycle faster/slower so the feet
+    // land where the capsule travels instead of sliding.
+    float stride = 0.0f;
+    if (next == walk_) stride = walk_stride_;
+    else if (next == run_) stride = run_stride_;
+    float rate = 1.0f;
+    if (stride > 0.2f && player.speed > 0.3f) rate = std::clamp(player.speed / stride, 0.5f, 2.5f);
+    player.time += dt * rate;
+    player.previous_time += dt * rate;
     player.blend = std::min(1.0f, player.blend + dt / kBlendSeconds);
     std::vector<glm::vec3> translation, scale;
     std::vector<glm::quat> rotation;
@@ -242,8 +283,17 @@ void SurvivalVisuals::update(const net::Snapshot& snapshot, std::uint8_t local_p
             player.tick = snapshot.tick;
         } else if (net::sequence_newer(snapshot.tick, player.tick)) {
             const float seconds = static_cast<float>(snapshot.tick - player.tick) / static_cast<float>(net::kTickHz);
-            player.speed = glm::length(glm::vec2{ghost.position.x - player.target.x, ghost.position.z - player.target.z})
-                / std::max(seconds, 0.001f);
+            const glm::vec3 raw =
+                (ghost.position - player.target) / std::max(seconds, 0.001f);
+            player.speed = glm::length(glm::vec2{raw.x, raw.z});
+            const float blend = 1.0f - std::exp(-8.0f * std::max(dt, 0.001f));
+            player.vel = glm::mix(player.vel, raw, blend);
+            const float yaw_rad = glm::radians(player.yaw);
+            const glm::vec2 fwd{std::sin(yaw_rad), std::cos(yaw_rad)};
+            const glm::vec2 side{std::cos(yaw_rad), -std::sin(yaw_rad)};
+            const glm::vec2 local{glm::dot(glm::vec2(player.vel.x, player.vel.z), fwd),
+                                  glm::dot(glm::vec2(player.vel.x, player.vel.z), side)};
+            player.lean = glm::mix(player.lean, glm::clamp(local * 0.035f, -0.18f, 0.18f), blend);
             player.target = ghost.position;
             player.tick = snapshot.tick;
         }
@@ -252,7 +302,7 @@ void SurvivalVisuals::update(const net::Snapshot& snapshot, std::uint8_t local_p
         player.yaw += std::remainder(ghost.yaw - player.yaw, 360.0f) * smoothing;
         player.action_left = std::max(0.0f, player.action_left - dt);
         if (interact_ >= 0 && interact && ghost.id == local_player && player.action_left <= 0) {
-            player.action_left = astronaut_.cpu().animations[static_cast<std::size_t>(interact_)].duration;
+            player.action_left = character_.cpu().animations[static_cast<std::size_t>(interact_)].duration;
             if (player.clip == interact_) player.time = 0;
         }
         animate(player, dt);
@@ -281,16 +331,18 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
         if (ghost.kind == net::Kind::Player) {
             const auto& player = players_[ghost.id];
             if (!player.active) continue;
-            const auto& character = astronaut_.cpu();
+            const auto& character = character_.cpu();
             const bool headless = static_cast<int>(ghost.id) == headless_player;
             if (headless && character.skins.empty()) continue;
             // The simulation stores the pawn center one metre above its feet.
             const auto model = glm::translate(glm::mat4(1), player.position - glm::vec3{0, 1, 0})
-                * glm::rotate(glm::mat4(1), glm::radians(player.yaw), glm::vec3{0, 1, 0}) * astronaut_transform_;
+                * glm::rotate(glm::mat4(1), glm::radians(player.yaw), glm::vec3{0, 1, 0})
+                * glm::rotate(glm::mat4(1), player.lean.x, glm::vec3{1, 0, 0})
+                * glm::rotate(glm::mat4(1), player.lean.y, glm::vec3{0, 0, 1}) * character_transform_;
             const CameraUniforms camera{view_projection, model};
             SDL_PushGPUVertexUniformData(command, 0, &camera, sizeof(camera));
             if (character.skins.empty()) {
-                astronaut_.draw(command, pass, pbr_, double_sided_, debug, camera_position);
+                character_.draw(command, pass, pbr_, double_sided_, debug, camera_position);
             } else if (headless && head_joint_ >= 0 && head_joint_ < player.palette.count
                        && head_joint_ < static_cast<int>(character.skins[0].inverse_bind.size())) {
                 // CS2-style first person: collapse the head onto its own center so it
@@ -299,11 +351,11 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
                 const auto& skin = character.skins[0];
                 body.joints[head_joint_] =
                     anim::collapse_joint(player.palette.joints[head_joint_], skin.inverse_bind[head_joint_]);
-                astronaut_.draw_skinned(command, pass, skinned_, body, debug, camera_position);
+                character_.draw_skinned(command, pass, skinned_, body, debug, camera_position);
             } else {
-                astronaut_.draw_skinned(command, pass, skinned_, player.palette, debug, camera_position);
+                character_.draw_skinned(command, pass, skinned_, player.palette, debug, camera_position);
             }
-            triangles_ += astronaut_.triangle_count;
+            triangles_ += character_.triangle_count;
             int tool = -1;
             switch (ghost.equipped) {
             case game::Item::StoneAxe: tool = 0; break;
@@ -355,7 +407,7 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
 
 void SurvivalVisuals::destroy(rhi::Host& host)
 {
-    astronaut_.destroy(host.device());
+    character_.destroy(host.device());
     for (auto& tree : trees_) tree.destroy(host.device());
     rock_.destroy(host.device());
     campfire_.destroy(host.device());

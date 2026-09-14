@@ -63,6 +63,38 @@ int main()
     for (int c = 0; c < 4; ++c)
         for (int r = 0; r < 4; ++r) check(std::isfinite(collapsed[c][r]), "Collapsed matrix must stay finite");
 
+    forge::assets::Scene treadmill;
+    forge::assets::Node hip;
+    hip.name = "Hip";
+    treadmill.nodes.push_back(hip);
+    forge::assets::Animation stride;
+    stride.name = "Stride";
+    stride.duration = 1.0f;
+    forge::assets::AnimChannel travel;
+    travel.node = 0;
+    travel.times = {0.0f, 1.0f};
+    travel.values = {0.0f, 0.0f, 0.0f, 2.0f, 0.0f, 0.0f};
+    stride.channels.push_back(travel);
+    treadmill.animations.push_back(stride);
+    const float measured = forge::anim::stride_speed(treadmill, 0, 0);
+    check(std::abs(measured - 2.0f) < 0.05f, "stride speed matches authored root travel");
+    check(forge::anim::stride_speed(treadmill, 0, -1) == 0.0f, "missing clip has no stride");
+    check(forge::anim::stride_speed(treadmill, 7, 0) == 0.0f, "missing node has no stride");
+    const float fox_stride = forge::anim::stride_speed(fox, 0, forge::anim::find_clip(fox, "Walk"));
+    check(std::isfinite(fox_stride) && fox_stride >= 0.0f, "fox walk stride stays finite");
+
+    forge::assets::Scene mannequin;
+    check(forge::assets::load_gltf(std::string(root) + "/assets/models/Als/Mannequin.glb", mannequin, error),
+          error.c_str());
+    check(mannequin.skins.size() == 1 && mannequin.skins[0].joints.size() == 67, "ALS mannequin has 67 Mixamo joints");
+    check(forge::anim::find_clip(mannequin, "walk") >= 0 && forge::anim::find_clip(mannequin, "run") >= 0
+              && forge::anim::find_clip(mannequin, "idle") >= 0,
+          "ALS mannequin idle/walk/run clips");
+    forge::anim::Palette mannequin_palette{};
+    check(forge::anim::evaluate(mannequin, 0, forge::anim::find_clip(mannequin, "walk"), 0.2f, mannequin_palette),
+          "ALS mannequin walk palette");
+    check(mannequin_palette.count == 67, "ALS mannequin palette uses every joint");
+
     std::cout << "Skin checks passed (" << fox.vertices.size() << " fox verts, " << fox.animations.size()
-              << " clips)\n";
+              << " clips, " << mannequin.skins[0].joints.size() << " ALS joints)\n";
 }

@@ -1,11 +1,17 @@
 #include "engine/phys/world.hpp"
+#include "engine/phys/als.hpp"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
+#include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Character/CharacterVirtual.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/OffsetCenterOfMassShape.h>
@@ -15,6 +21,8 @@
 #include <Jolt/RegisterTypes.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 #include <cmath>
 
 namespace forge::phys {
@@ -75,9 +83,90 @@ glm::mat4 to_glm(const JPH::RMat44& m)
     return out;
 }
 
+struct RayHit {
+    bool hit = false;
+    float fraction = 1.0f;
+    glm::vec3 point{0};
+    glm::vec3 normal{0, 1, 0};
+};
+
+RayHit cast_ray(JPH::PhysicsSystem& system, JPH::RVec3 start, JPH::Vec3 dir)
+{
+    RayHit out;
+    JPH::RayCastResult result;
+    if (!system.GetNarrowPhaseQuery().CastRay(JPH::RRayCast{start, dir}, result,
+                                              system.GetDefaultBroadPhaseLayerFilter(layer_moving),
+                                              system.GetDefaultLayerFilter(layer_moving)))
+        return out;
+    out.hit = true;
+    out.fraction = result.mFraction;
+    out.point = {static_cast<float>(start.GetX() + dir.GetX() * result.mFraction),
+                 static_cast<float>(start.GetY() + dir.GetY() * result.mFraction),
+                 static_cast<float>(start.GetZ() + dir.GetZ() * result.mFraction)};
+    JPH::BodyLockRead lock(system.GetBodyLockInterface(), result.mBodyID);
+    if (lock.Succeeded()) {
+        const auto n = lock.GetBody().GetWorldSpaceSurfaceNormal(result.mSubShapeID2,
+                                                                 {out.point.x, out.point.y, out.point.z});
+        out.normal = {n.GetX(), n.GetY(), n.GetZ()};
+    }
+    return out;
+}
+
+bool walkable(glm::vec3 normal)
+{
+    return normal.y >= std::cos(glm::radians(als::kMaxSlopeDegrees));
+}
+
+RayHit cast_capsule(JPH::PhysicsSystem& system, glm::vec3 origin, glm::vec3 delta, float cylinder_half, float radius)
+{
+    RayHit out;
+    JPH::RefConst<JPH::Shape> shape = new JPH::CapsuleShape(cylinder_half, radius);
+    const JPH::RShapeCast cast = JPH::RShapeCast::sFromWorldTransform(
+        shape, JPH::Vec3::sReplicate(1.0f), JPH::RMat44::sTranslation({origin.x, origin.y, origin.z}),
+        {delta.x, delta.y, delta.z});
+    JPH::ShapeCastSettings settings;
+    JPH::ClosestHitCollisionCollector<JPH::CastShapeCollector> collector;
+    system.GetNarrowPhaseQuery().CastShape(cast, settings, {origin.x, origin.y, origin.z}, collector,
+                                           system.GetDefaultBroadPhaseLayerFilter(layer_moving),
+                                           system.GetDefaultLayerFilter(layer_moving));
+    if (!collector.HadHit()) return out;
+    out.hit = true;
+    out.fraction = collector.mHit.mFraction;
+    const auto& p = collector.mHit.mContactPointOn2;
+    out.point = {origin.x + p.GetX(), origin.y + p.GetY(), origin.z + p.GetZ()};
+    JPH::BodyLockRead lock(system.GetBodyLockInterface(), collector.mHit.mBodyID2);
+    if (lock.Succeeded()) {
+        const auto n = lock.GetBody().GetWorldSpaceSurfaceNormal(collector.mHit.mSubShapeID2,
+                                                                 {out.point.x, out.point.y, out.point.z});
+        out.normal = {n.GetX(), n.GetY(), n.GetZ()};
+    }
+    return out;
+}
+
 } // namespace
 
 struct World::Impl {
+    struct Character {
+        JPH::Ref<JPH::CharacterVirtual> body;
+        JPH::RefConst<JPH::Shape> shape;
+        glm::vec3 walk{0};
+        als::State move{};
+        glm::vec3 mantle_from{0};
+        glm::vec3 mantle_to{0};
+        float mantle_yaw_from = 0.0f;
+        float mantle_yaw_to = 0.0f;
+        float mantle_time = 0.0f;
+        float mantle_duration = 0.0f;
+        float speed = als::Settings{}.run_forward;
+        float facing_yaw = 0.0f;
+        float rest_height = als::kCapsuleHalfHeight;
+        float radius = als::kCapsuleRadius;
+        float mantle_cooldown = 0.0f;
+        bool jump = false;
+        bool enabled = true;
+        bool mantling = false;
+    };
+
     Broadphase broadphase;
     ObjectVsBroadphase object_vs_bp;
     ObjectPair object_pair;
@@ -85,16 +174,14 @@ struct World::Impl {
     std::unique_ptr<JPH::JobSystemThreadPool> jobs;
     JPH::PhysicsSystem system;
     JPH::BodyInterface* bodies = nullptr;
-    JPH::Ref<JPH::CharacterVirtual> character;
-    JPH::RefConst<JPH::Shape> character_shape;
+    std::vector<Character> characters;
+    std::vector<JPH::BodyID> boxes;
     JPH::Body* car = nullptr;
     JPH::Ref<JPH::VehicleConstraint> vehicle;
     JPH::RefConst<JPH::VehicleCollisionTester> tester;
-    float vertical_velocity = 0.0f;
     float vehicle_forward = 0.0f;
     float vehicle_steer = 0.0f;
     float vehicle_brake = 0.0f;
-    bool character_enabled = true;
     bool registered = false;
 };
 
@@ -113,8 +200,7 @@ World::~World()
         impl_->bodies->DestroyBody(impl_->car->GetID());
     }
     impl_->car = nullptr;
-    impl_->character = nullptr;
-    impl_->character_shape = nullptr;
+    impl_->characters.clear();
     impl_.reset();
     JPH::UnregisterTypes();
     delete JPH::Factory::sInstance;
@@ -130,30 +216,46 @@ bool World::init()
     impl_->allocator = std::make_unique<JPH::TempAllocatorImpl>(8 * 1024 * 1024);
     impl_->jobs = std::make_unique<JPH::JobSystemThreadPool>(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, 1);
     impl_->system.Init(1024, 0, 2048, 1024, impl_->broadphase, impl_->object_vs_bp, impl_->object_pair);
-    impl_->system.SetGravity({0, -9.81f, 0});
+    impl_->system.SetGravity({0, -als::Settings{}.gravity, 0});
     impl_->bodies = &impl_->system.GetBodyInterface();
     return true;
 }
 
-void World::add_box(glm::vec3 center, glm::vec3 half_extents)
+int World::add_box(glm::vec3 center, glm::vec3 half_extents)
 {
     auto shape = new JPH::BoxShape(to_jolt(half_extents));
     JPH::BodyCreationSettings settings(shape, to_jolt(center), JPH::Quat::sIdentity(), JPH::EMotionType::Static,
                                        layer_static);
-    impl_->bodies->CreateAndAddBody(settings, JPH::EActivation::DontActivate);
+    const auto id = impl_->bodies->CreateAndAddBody(settings, JPH::EActivation::DontActivate);
+    if (id.IsInvalid()) return -1;
+    impl_->boxes.push_back(id);
+    return static_cast<int>(impl_->boxes.size() - 1);
 }
 
-void World::spawn_character(glm::vec3 position, float radius, float half_height)
+void World::remove_box(int box)
 {
-    impl_->character_shape = new JPH::CapsuleShape(half_height, radius);
+    if (box < 0 || box >= static_cast<int>(impl_->boxes.size())) return;
+    const auto id = impl_->boxes[static_cast<std::size_t>(box)];
+    if (id.IsInvalid()) return;
+    impl_->bodies->RemoveBody(id);
+    impl_->bodies->DestroyBody(id);
+    impl_->boxes[static_cast<std::size_t>(box)] = {};
+}
+
+int World::spawn_character(glm::vec3 position, float radius, float half_height)
+{
+    Impl::Character character;
+    character.shape = new JPH::CapsuleShape(half_height, radius);
     JPH::CharacterVirtualSettings settings;
-    settings.mShape = impl_->character_shape;
+    settings.mShape = character.shape;
     settings.mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), -radius);
-    settings.mMass = 80.0f;
-    settings.mMaxSlopeAngle = JPH::DegreesToRadians(50.0f);
-    impl_->character = new JPH::CharacterVirtual(&settings, to_jolt(position), JPH::Quat::sIdentity(), 0,
-                                                 &impl_->system);
-    impl_->vertical_velocity = 0.0f;
+    settings.mMass = als::kMass;
+    settings.mMaxSlopeAngle = JPH::DegreesToRadians(als::kMaxSlopeDegrees);
+    character.body = new JPH::CharacterVirtual(&settings, to_jolt(position), JPH::Quat::sIdentity(), 0, &impl_->system);
+    character.radius = radius;
+    character.rest_height = half_height + radius;
+    impl_->characters.push_back(std::move(character));
+    return static_cast<int>(impl_->characters.size() - 1);
 }
 
 bool World::spawn_vehicle(glm::vec3 position, float yaw_degrees)
@@ -228,13 +330,134 @@ bool World::spawn_vehicle(glm::vec3 position, float yaw_degrees)
     return true;
 }
 
-void World::set_character_enabled(bool enabled) { impl_->character_enabled = enabled; }
+void World::remove_character(int character)
+{
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return;
+    impl_->characters[static_cast<std::size_t>(character)] = {};
+}
+
+void World::set_character_enabled(bool enabled) { set_character_enabled(0, enabled); }
+
+void World::set_character_enabled(int character, bool enabled)
+{
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return;
+    auto& state = impl_->characters[static_cast<std::size_t>(character)];
+    if (state.body) state.enabled = enabled;
+}
 
 void World::warp_character(glm::vec3 position)
 {
-    if (!impl_->character) return;
-    impl_->character->SetPosition(to_jolt(position));
-    impl_->vertical_velocity = 0.0f;
+    warp_character(0, position);
+}
+
+void World::warp_character(int character, glm::vec3 position)
+{
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return;
+    auto& state = impl_->characters[static_cast<std::size_t>(character)];
+    if (!state.body) return;
+    state.body->SetPosition(to_jolt(position));
+    state.move.planar = {};
+    state.move.vertical = 0.0f;
+    state.mantling = false;
+    state.mantle_time = 0.0f;
+}
+
+void World::set_character_input(int character, glm::vec3 walk_xz, bool jump, float speed)
+{
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return;
+    auto& state = impl_->characters[static_cast<std::size_t>(character)];
+    if (!state.body) return;
+    state.walk = walk_xz;
+    state.jump = jump;
+    state.speed = std::max(0.0f, speed);
+}
+
+bool World::try_mantle(int character, glm::vec3 wish_dir_xz)
+{
+    if (!impl_->registered || character < 0 || character >= static_cast<int>(impl_->characters.size())) return false;
+    auto& state = impl_->characters[static_cast<std::size_t>(character)];
+    if (!state.body || !state.enabled || state.mantling || state.mantle_cooldown > 0.0f) return false;
+    const bool grounded = state.body->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
+    const float max_rise = grounded ? als::kMantleMaxRise : als::kMantleMaxRiseAir;
+    const float reach = grounded ? als::kMantleReach : als::kMantleReachAir;
+    const glm::vec2 wish{wish_dir_xz.x, wish_dir_xz.z};
+    const bool has_input = glm::length(wish) >= 0.3f;
+    const bool has_velocity = glm::length(state.move.planar) >= 0.01f;
+    const float actor = state.move.actor_yaw;
+    float forward_angle = actor;
+    if (has_velocity) {
+        if (has_input) {
+            const float input_yaw = glm::degrees(std::atan2(wish.x, wish.y));
+            float delta = als::unwind_degrees(input_yaw - state.move.velocity_yaw);
+            delta = std::clamp(delta, -als::kMantleMaxReachAngle, als::kMantleMaxReachAngle);
+            forward_angle = state.move.velocity_yaw + delta;
+        } else {
+            forward_angle = state.move.velocity_yaw;
+        }
+    } else if (has_input) {
+        forward_angle = glm::degrees(std::atan2(wish.x, wish.y));
+    }
+    const float delta_actor = als::unwind_degrees(forward_angle - actor);
+    if (std::abs(delta_actor) > als::kMantleTraceAngle) return false;
+    const float dir_yaw = glm::radians(actor + std::clamp(delta_actor, -als::kMantleMaxReachAngle, als::kMantleMaxReachAngle));
+    const glm::vec2 dir{std::sin(dir_yaw), std::cos(dir_yaw)};
+    const JPH::RVec3 center = state.body->GetPosition();
+    const float feet = static_cast<float>(center.GetY()) - state.rest_height;
+    const float trace_radius = std::max(0.05f, state.radius - 0.01f);
+    const float ue_half = 0.5f * (max_rise - als::kMantleMinRise);
+    const float cyl_half = std::max(0.02f, ue_half - trace_radius);
+    const glm::vec3 forward_start{static_cast<float>(center.GetX()) - dir.x * state.radius,
+                                  feet + 0.5f * (als::kMantleMinRise + max_rise) - 0.024f,
+                                  static_cast<float>(center.GetZ()) - dir.y * state.radius};
+    const glm::vec3 forward_delta{dir.x * (state.radius + reach + 0.01f), 0.0f,
+                                  dir.y * (state.radius + reach + 0.01f)};
+    const RayHit wall = cast_capsule(impl_->system, forward_start, forward_delta, cyl_half, trace_radius);
+    if (!wall.hit || walkable(wall.normal)) return false;
+    const glm::vec2 target_dir{-wall.normal.x, -wall.normal.z};
+    const float tlen = glm::length(target_dir);
+    const glm::vec2 into = tlen > 1e-4f ? target_dir / tlen : dir;
+    const glm::vec2 land{wall.point.x + into.x * als::kMantleTargetOffset,
+                         wall.point.z + into.y * als::kMantleTargetOffset};
+    const float drop_len = max_rise + 0.05f;
+    const JPH::RVec3 drop{land.x, feet + max_rise + 0.05f, land.y};
+    const RayHit top = cast_ray(impl_->system, drop, JPH::Vec3(0.0f, -drop_len, 0.0f));
+    if (!top.hit || top.normal.y < als::kMantleSlopeCos || !walkable(top.normal)) return false;
+    const float rise = top.point.y - feet;
+    if (rise < als::kMantleMinRise || rise > max_rise) return false;
+    const JPH::RVec3 ceiling{land.x, top.point.y + 0.02f, land.y};
+    const RayHit roof = cast_ray(impl_->system, ceiling, JPH::Vec3(0.0f, 2.0f * state.rest_height, 0.0f));
+    if (roof.hit && roof.fraction * 2.0f * state.rest_height < 2.0f * state.rest_height - 0.05f) return false;
+    const glm::vec3 from = to_glm(center);
+    const glm::vec3 to_pos{land.x, top.point.y + state.rest_height, land.y};
+    state.mantling = true;
+    state.mantle_from = from;
+    state.mantle_to = to_pos;
+    state.mantle_yaw_from = state.move.actor_yaw;
+    state.mantle_yaw_to = glm::degrees(std::atan2(into.x, into.y));
+    state.mantle_time = 0.0f;
+    const bool high = rise > als::kMantleHigh;
+    state.mantle_duration = !grounded ? als::kMantleAirSeconds
+        : (high ? als::kMantleHighSeconds : als::kMantleLowSeconds);
+    state.mantle_cooldown = als::kMantleCooldown;
+    state.move.planar = {};
+    state.move.vertical = 0.0f;
+    return true;
+}
+
+void World::set_character_facing(int character, float yaw_degrees)
+{
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return;
+    auto& state = impl_->characters[static_cast<std::size_t>(character)];
+    if (!state.body) return;
+    state.facing_yaw = yaw_degrees;
+    if (!state.move.yaw_initialized) {
+        state.move.actor_yaw = yaw_degrees;
+        state.move.target_yaw = yaw_degrees;
+        state.move.smooth_target_yaw = yaw_degrees;
+        state.move.previous_view_yaw = yaw_degrees;
+        state.move.view_yaw = yaw_degrees;
+        state.move.yaw_initialized = true;
+    }
 }
 
 void World::set_vehicle_input(float forward, float steer, float brake)
@@ -246,42 +469,90 @@ void World::set_vehicle_input(float forward, float steer, float brake)
 
 void World::tick(float dt, glm::vec3 walk_xz, bool jump)
 {
+    set_character_input(0, walk_xz, jump);
+    tick(dt);
+}
+
+void World::tick(float dt)
+{
     if (impl_->vehicle && impl_->car) {
         auto* controller = static_cast<JPH::WheeledVehicleController*>(impl_->vehicle->GetController());
         controller->SetDriverInput(impl_->vehicle_forward, impl_->vehicle_steer, impl_->vehicle_brake, 0.0f);
         if (std::abs(impl_->vehicle_forward) + std::abs(impl_->vehicle_steer) + impl_->vehicle_brake > 0.01f)
             impl_->bodies->ActivateBody(impl_->car->GetID());
     }
-    if (impl_->character && impl_->character_enabled) {
-        const bool grounded = impl_->character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround
-            || impl_->character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnSteepGround;
-        if (grounded) impl_->vertical_velocity = 0.0f;
-        else impl_->vertical_velocity += -9.81f * dt;
-        if (jump && grounded) impl_->vertical_velocity = 6.0f;
-        const float speed = glm::length(glm::vec2(walk_xz.x, walk_xz.z));
-        glm::vec3 walk = walk_xz;
-        if (speed > 1.0f) walk /= speed;
-        walk *= 5.5f;
-        impl_->character->SetLinearVelocity({walk.x, impl_->vertical_velocity, walk.z});
+    for (auto& character : impl_->characters) {
+        if (!character.body || !character.enabled) continue;
+        if (character.mantle_cooldown > 0.0f) character.mantle_cooldown = std::max(0.0f, character.mantle_cooldown - dt);
+        if (character.mantling) {
+            character.mantle_time += dt;
+            const float span = std::max(character.mantle_duration, 1e-4f);
+            float alpha = std::clamp(character.mantle_time / span, 0.0f, 1.0f);
+            alpha = alpha * alpha * (3.0f - 2.0f * alpha);
+            const glm::vec3 pos = glm::mix(character.mantle_from, character.mantle_to, alpha);
+            character.body->SetPosition(to_jolt(pos));
+            character.body->SetLinearVelocity({0, 0, 0});
+            character.move.planar = {};
+            character.move.vertical = 0.0f;
+            character.move.actor_yaw = als::unwind_degrees(
+                character.mantle_yaw_from
+                + als::remap_ccw(als::unwind_degrees(character.mantle_yaw_to - character.mantle_yaw_from)) * alpha);
+            character.move.target_yaw = character.move.actor_yaw;
+            character.move.smooth_target_yaw = character.move.actor_yaw;
+            if (character.mantle_time >= span) character.mantling = false;
+            character.jump = false;
+            continue;
+        }
+        // Only walkable ground zeroes gravity: a wall contact reports
+        // OnSteepGround, and treating it as grounded freezes jumps mid-air.
+        const bool grounded = character.body->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround;
+        const auto linear = character.body->GetLinearVelocity();
+        character.move.planar = {linear.GetX(), linear.GetZ()};
+        character.move.vertical = linear.GetY();
+        character.move = als::tick(character.move, character.walk, character.facing_yaw, character.jump, grounded,
+                                   character.speed, dt);
+        character.body->SetLinearVelocity({character.move.planar.x, character.move.vertical, character.move.planar.y});
         JPH::CharacterVirtual::ExtendedUpdateSettings update;
-        impl_->character->ExtendedUpdate(dt, impl_->system.GetGravity(), update,
-                                         impl_->system.GetDefaultBroadPhaseLayerFilter(layer_moving),
-                                         impl_->system.GetDefaultLayerFilter(layer_moving), {}, {}, *impl_->allocator);
-        impl_->vertical_velocity = impl_->character->GetLinearVelocity().GetY();
+        update.mWalkStairsStepUp = JPH::Vec3(0, als::kStepUp, 0);
+        character.body->ExtendedUpdate(dt, impl_->system.GetGravity(), update,
+                                       impl_->system.GetDefaultBroadPhaseLayerFilter(layer_moving),
+                                       impl_->system.GetDefaultLayerFilter(layer_moving), {}, {}, *impl_->allocator);
+        const auto after = character.body->GetLinearVelocity();
+        character.move.planar = {after.GetX(), after.GetZ()};
+        character.move.vertical = after.GetY();
+        character.jump = false;
     }
     impl_->system.Update(dt, 1, impl_->allocator.get(), impl_->jobs.get());
 }
 
 glm::vec3 World::character_position() const
 {
-    if (!impl_->character) return {};
-    return to_glm(impl_->character->GetPosition());
+    return character_position(0);
 }
 
-bool World::character_supported() const
+glm::vec3 World::character_position(int character) const
 {
-    if (!impl_->character) return false;
-    return impl_->character->GetGroundState() != JPH::CharacterVirtual::EGroundState::InAir;
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return {};
+    const auto& state = impl_->characters[static_cast<std::size_t>(character)];
+    return state.body ? to_glm(state.body->GetPosition()) : glm::vec3{};
+}
+
+float World::character_yaw() const { return character_yaw(0); }
+
+float World::character_yaw(int character) const
+{
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return 0.0f;
+    return impl_->characters[static_cast<std::size_t>(character)].move.actor_yaw;
+}
+
+bool World::character_supported() const { return character_supported(0); }
+
+bool World::character_supported(int character) const
+{
+    if (character < 0 || character >= static_cast<int>(impl_->characters.size())) return false;
+    const auto& state = impl_->characters[static_cast<std::size_t>(character)];
+    if (!state.body) return false;
+    return state.body->GetGroundState() != JPH::CharacterVirtual::EGroundState::InAir;
 }
 
 bool World::has_vehicle() const { return impl_->vehicle != nullptr; }

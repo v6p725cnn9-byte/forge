@@ -112,7 +112,7 @@ bool SurvivalLab::setup(rhi::Host& host, Camera& camera)
     }
 
     debug_.lab = "survival";
-    debug_.model = "Astronaut / Kenney Nature";
+    debug_.model = "ALS mannequin / Kenney Nature";
     debug_.survival = true;
     debug_.stream_radius = 70.0f;
     debug_.net_role = hosting_ ? "host" : "client";
