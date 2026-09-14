@@ -200,7 +200,7 @@ rhi::FrameResult SkinVehicleLab::draw(rhi::Host& host, rhi::Command& command, SD
     SDL_PushGPUVertexUniformData(command.handle, 0, &camera_ubo, sizeof(camera_ubo));
     fox_.draw_skinned(command.handle, pass, skinned_, palette_, debug_, camera.position);
     SDL_EndGPURenderPass(pass);
-    render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f);
+    if (!render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 

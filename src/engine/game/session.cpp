@@ -59,6 +59,19 @@ glm::vec3 Sim::spawn_point(int player_id) const
     return {x, 1.0f, 2.0f};
 }
 
+void Sim::remove_pawn(int player_id)
+{
+    if (player_id < 0 || player_id >= script::kMaxPlayers) return;
+    pawns_[player_id] = {};
+    bool any = false, all = true;
+    for (const auto& pawn : pawns_) {
+        if (!pawn.used) continue;
+        any = true;
+        all = all && pawn.extracted;
+    }
+    if (phase_ == Phase::Play && any && all) phase_ = Phase::Won;
+}
+
 void Sim::ensure_pawn(int player_id)
 {
     if (player_id < 0 || player_id >= script::kMaxPlayers) return;

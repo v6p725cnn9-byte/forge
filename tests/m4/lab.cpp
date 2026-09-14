@@ -113,7 +113,7 @@ rhi::FrameResult StreamCityLab::draw(rhi::Host& host, rhi::Command& command, SDL
     scene_.draw_instanced(command.handle, pass, pipeline_, instances_, static_cast<Uint32>(packed_.size()),
                           debug_, camera.position);
     SDL_EndGPURenderPass(pass);
-    render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f);
+    if (!render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 

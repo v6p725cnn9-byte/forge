@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -42,6 +43,18 @@ int main()
     check(std::abs(in.master - 0.4f) < 0.001f && std::abs(in.sensitivity - 0.2f) < 0.001f, "floats");
     check(std::string(forge::app::tr("ru", "single")) != forge::app::tr("en", "single"), "i18n");
     check(std::string(forge::app::tr("en", "quit")) == "Quit", "english quit");
+    {
+        std::ofstream corrupt(path);
+        corrupt << "sensitivity=nan\nmaster=inf\nwidth=1920junk\nheight=999999\nvsync=typo\nport=32oops\n";
+    }
+    forge::app::Settings defaults;
+    auto validated = defaults;
+    check(forge::app::load_settings(validated, path), "load partially corrupt config");
+    check(validated.sensitivity == defaults.sensitivity && validated.master == defaults.master,
+          "non-finite settings retain defaults");
+    check(validated.width == defaults.width && validated.port == defaults.port && validated.vsync == defaults.vsync,
+          "malformed values retain defaults");
+    check(validated.height == 4320, "oversized display bounded");
     std::filesystem::remove(path);
     std::cout << "Settings checks passed\n";
 }

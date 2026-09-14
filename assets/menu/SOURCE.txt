@@ -1,0 +1,4 @@
+Main menu background.
+File: background.png (1671x941 PNG).
+Provided by the project owner (AI-generated art) for use as the Forge
+main-menu backdrop. Internal project asset, not redistributed separately.

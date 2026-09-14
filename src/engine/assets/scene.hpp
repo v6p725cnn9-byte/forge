@@ -126,4 +126,9 @@ bool load_gltf(const std::filesystem::path& path, Scene& destination, std::strin
 
 Scene make_unit_cube();
 
+// Procedural menu vista: camp knoll, lake basin, far ridge ring, still water
+// plane and an unlit gradient sky dome with the sun glow baked toward
+// sun_direction. Deterministic, no asset files.
+Scene make_vista_terrain(const glm::vec3& sun_direction);
+
 } // namespace forge::assets

@@ -59,6 +59,10 @@ bool Ui::create(rhi::Host& host)
         return false;
     }
     auto* copy = SDL_BeginGPUCopyPass(command.handle);
+    if (!copy) {
+        SDL_ReleaseGPUTransferBuffer(host.device(), upload);
+        return false;
+    }
     SDL_GPUTextureTransferInfo src{};
     src.transfer_buffer = upload;
     SDL_GPUTextureRegion dst{};
@@ -68,9 +72,9 @@ bool Ui::create(rhi::Host& host)
     dst.d = 1;
     SDL_UploadToGPUTexture(copy, &src, &dst, false);
     SDL_EndGPUCopyPass(copy);
-    command.submit();
-    SDL_WaitForGPUIdle(host.device());
+    const bool submitted = command.submit();
     SDL_ReleaseGPUTransferBuffer(host.device(), upload);
+    if (!submitted || !SDL_WaitForGPUIdle(host.device())) return false;
 
     SDL_GPUSamplerCreateInfo samp{};
     samp.min_filter = SDL_GPU_FILTER_LINEAR;
@@ -143,14 +147,14 @@ void Ui::destroy(rhi::Host& host)
     vertex_capacity_ = 0;
 }
 
-void Ui::begin(int width, int height, float mouse_x, float mouse_y, bool mouse_down)
+void Ui::begin(int width, int height, float mouse_x, float mouse_y, bool mouse_down, bool pressed, bool released)
 {
     width_ = std::max(width, 1);
     height_ = std::max(height, 1);
     mx_ = mouse_x;
     my_ = mouse_y;
-    mouse_pressed_ = mouse_down && !was_down_;
-    mouse_released_ = !mouse_down && was_down_;
+    mouse_pressed_ = pressed || (mouse_down && !was_down_);
+    mouse_released_ = released || (!mouse_down && was_down_);
     mouse_down_ = mouse_down;
     was_down_ = mouse_down;
     hot_ = 0;
@@ -348,6 +352,7 @@ bool Ui::submit(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchai
     std::memcpy(map, verts_.data(), bytes);
     SDL_UnmapGPUTransferBuffer(host.device(), transfer_);
     auto* copy = SDL_BeginGPUCopyPass(command.handle);
+    if (!copy) return false;
     const SDL_GPUTransferBufferLocation src{transfer_, 0};
     const SDL_GPUBufferRegion dst{vertices_, 0, bytes};
     SDL_UploadToGPUBuffer(copy, &src, &dst, true);

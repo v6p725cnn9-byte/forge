@@ -37,6 +37,7 @@ public:
 
     void reset();
     void ensure_pawn(int player_id);
+    void remove_pawn(int player_id);
     glm::vec3 spawn_point(int player_id) const;
     void tick(float dt, script::Registry& world);
     void harvest(int player_id, script::Registry& world);

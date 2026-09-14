@@ -92,7 +92,8 @@ endif()
 add_library(forge_asset_deps STATIC src/engine/assets/dependencies.cpp third_party/mikktspace/mikktspace.c)
 target_include_directories(forge_asset_deps SYSTEM PUBLIC third_party/cgltf third_party/stb third_party/mikktspace)
 
-add_library(forge_assets STATIC src/engine/assets/gltf.cpp src/engine/assets/cube.cpp src/engine/anim/animator.cpp)
+add_library(forge_assets STATIC src/engine/assets/gltf.cpp src/engine/assets/cube.cpp src/engine/assets/terrain.cpp
+    src/engine/anim/animator.cpp)
 target_include_directories(forge_assets PUBLIC src)
 target_link_libraries(forge_assets PUBLIC glm::glm PRIVATE forge_asset_deps)
 
@@ -131,6 +132,8 @@ add_library(forge_engine STATIC
     src/engine/app/run.cpp
     src/engine/app/settings.cpp
     src/engine/app/menu.cpp
+    src/engine/app/background.cpp
+    src/engine/app/menu_scene.cpp
     src/engine/ui/font.cpp
     src/engine/ui/ui.cpp
     src/engine/core/paths.cpp
@@ -229,6 +232,12 @@ add_custom_target(forge_stage_runtime
         ${CMAKE_SOURCE_DIR}/assets/fonts/LICENSE.txt
         ${CMAKE_BINARY_DIR}/assets/fonts
     COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_BINARY_DIR}/assets/menu
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_SOURCE_DIR}/assets/menu/background.png
+        ${CMAKE_SOURCE_DIR}/assets/menu/SOURCE.txt
+        ${CMAKE_BINARY_DIR}/assets/menu
+    COMMAND ${CMAKE_COMMAND} -E make_directory
         ${CMAKE_BINARY_DIR}/scripts
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${CMAKE_SOURCE_DIR}/assets/scripts/main.lua
@@ -312,7 +321,7 @@ if(BUILD_TESTING)
     add_test(NAME net COMMAND net_tests)
 
     add_executable(survival_tests tests/survival_tests.cpp)
-    target_link_libraries(survival_tests PRIVATE forge_game forge_net)
+    target_link_libraries(survival_tests PRIVATE forge_net)
     add_test(NAME survival COMMAND survival_tests)
 
     add_executable(settings_tests tests/settings_tests.cpp)
@@ -336,6 +345,6 @@ if(BUILD_TESTING)
         add_test(NAME gpu_smoke_m6 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m6>)
         add_test(NAME gpu_smoke_m7 COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge_m7>)
         add_test(NAME gpu_smoke_survival COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/smoke.py $<TARGET_FILE:forge>)
-        set_tests_properties(gpu_smoke_m1 gpu_smoke_m2 gpu_smoke_m3 gpu_smoke_m4 gpu_smoke_m5 gpu_smoke_m6 gpu_smoke_m7 gpu_smoke_survival PROPERTIES TIMEOUT 90 LABELS gpu)
+        set_tests_properties(gpu_smoke_m1 gpu_smoke_m2 gpu_smoke_m3 gpu_smoke_m4 gpu_smoke_m5 gpu_smoke_m6 gpu_smoke_m7 gpu_smoke_survival PROPERTIES TIMEOUT 90 LABELS gpu RUN_SERIAL TRUE)
     endif()
 endif()

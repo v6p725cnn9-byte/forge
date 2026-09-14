@@ -10,9 +10,9 @@ SDL_GPUGraphicsPipeline* make_pbr_pipeline(rhi::Host& host, bool double_sided);
 SDL_GPUGraphicsPipeline* make_pbr_instanced_pipeline(rhi::Host& host, bool double_sided);
 SDL_GPUGraphicsPipeline* make_pbr_skinned_pipeline(rhi::Host& host, bool double_sided);
 SDL_GPUGraphicsPipeline* make_shadow_pipeline(rhi::Host& host);
-void apply_tonemap(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, float exposure,
+bool apply_tonemap(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, float exposure,
                    float bloom_strength);
-void apply_bloom(rhi::Host& host, rhi::Command& command, float threshold);
+bool apply_bloom(rhi::Host& host, rhi::Command& command, float threshold);
 
 struct CameraUniforms {
     glm::mat4 view_projection{1.0f};

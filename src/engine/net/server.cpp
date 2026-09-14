@@ -21,6 +21,10 @@ bool Server::listen(std::uint16_t port, bool lan)
 void Server::close()
 {
     socket_.close();
+    for (const auto& peer : peers_) {
+        if (world_) world_->destroy_player(peer.player_id);
+        if (sim_) sim_->remove_pawn(peer.player_id);
+    }
     peers_.clear();
     tick_ = 0;
     accumulator_ = 0;
@@ -71,9 +75,16 @@ bool Server::accept(const Address& address)
 
 void Server::poll()
 {
-    std::uint8_t buffer[kMaxPacket];
+    const auto now = std::chrono::steady_clock::now();
+    std::erase_if(peers_, [&](const Peer& peer) {
+        if (now - peer.last_recv <= kTimeout) return false;
+        if (world_) world_->destroy_player(peer.player_id);
+        if (sim_) sim_->remove_pawn(peer.player_id);
+        return true;
+    });
+    std::uint8_t buffer[kMaxPacket + 1];
     Address from{};
-    for (;;) {
+    for (int received = 0; received < 256; ++received) {
         const int got = socket_.receive(from, buffer, sizeof(buffer));
         if (got == 0) break;
         if (got < 0) break;
@@ -95,7 +106,7 @@ void Server::poll()
         if (!peer || type != Packet::Input) continue;
         Input input{};
         if (!unpack_input(buffer, static_cast<std::size_t>(got), input)) continue;
-        if (input.seq < peer->last_seq && peer->last_seq - input.seq < 1024) continue;
+        if (!sequence_newer(input.seq, peer->last_seq)) continue;
         peer->last_seq = input.seq;
         peer->input = input;
         if (input.interact) peer->pending_interact = true;
@@ -107,17 +118,12 @@ void Server::poll()
 void Server::simulate(float dt)
 {
     if (!world_) return;
-    const auto now = std::chrono::steady_clock::now();
     for (auto& peer : peers_) {
         if (peer.player_id < 0) continue;
-        if (now - peer.last_recv > kTimeout) {
-            world_->destroy_player(peer.player_id);
-            peer.player_id = -1;
-            continue;
-        }
         auto* player = world_->player(peer.player_id);
         if (!player) continue;
         const auto* pawn = sim_ ? sim_->pawn(peer.player_id) : nullptr;
+        if (sim_ && sim_->phase() != game::Phase::Play) continue;
         if (pawn && (pawn->extracted || pawn->hp <= 0.0f)) continue;
         glm::vec3 move{peer.input.move_x, 0.0f, peer.input.move_z};
         const float length = glm::length(glm::vec2(move.x, move.z));
@@ -198,6 +204,9 @@ void Server::broadcast()
                 snapshot.entities.push_back(ghost);
             }
             std::sort(snapshot.entities.begin(), snapshot.entities.end(), [&](const Ghost& a, const Ghost& b) {
+                const bool a_self = a.kind == Kind::Player && a.id == peer.player_id;
+                const bool b_self = b.kind == Kind::Player && b.id == peer.player_id;
+                if (a_self != b_self) return a_self;
                 return xz_distance(player->position, a.position) < xz_distance(player->position, b.position);
             });
             if (snapshot.entities.size() > static_cast<std::size_t>(kMaxSnapshotEntities))
@@ -222,7 +231,8 @@ void Server::broadcast()
 void Server::update(float dt)
 {
     poll();
-    accumulator_ += dt;
+    if (!std::isfinite(dt) || dt <= 0) return;
+    accumulator_ += std::min(dt, 0.25f);
     const float step = 1.0f / static_cast<float>(kTickHz);
     while (accumulator_ >= step) {
         simulate(step);

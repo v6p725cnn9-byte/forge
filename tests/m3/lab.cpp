@@ -210,8 +210,8 @@ rhi::FrameResult ShadowWalkLab::draw(rhi::Host& host, rhi::Command& command, SDL
     scene_.draw(command.handle, pass, pbr_cull_, pbr_double_, debug_, camera.position, shadows_);
     SDL_EndGPURenderPass(pass);
 
-    if (debug_.bloom > 0.001f) render::apply_bloom(host, command, 1.0f);
-    render::apply_tonemap(host, command, swapchain, debug_.exposure, debug_.bloom);
+    if (debug_.bloom > 0.001f && !render::apply_bloom(host, command, 1.0f)) return rhi::FrameResult::failed;
+    if (!render::apply_tonemap(host, command, swapchain, debug_.exposure, debug_.bloom)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 

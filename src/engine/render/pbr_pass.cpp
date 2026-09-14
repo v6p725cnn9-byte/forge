@@ -202,16 +202,16 @@ SDL_GPUGraphicsPipeline* make_shadow_pipeline(rhi::Host& host)
     return pipeline;
 }
 
-void apply_bloom(rhi::Host& host, rhi::Command& command, float threshold)
+bool apply_bloom(rhi::Host& host, rhi::Command& command, float threshold)
 {
-    if (!host.bloom() || !host.bloom_pipeline()) return;
+    if (!host.bloom() || !host.bloom_pipeline()) return false;
     SDL_GPUColorTargetInfo color{};
     color.texture = host.bloom();
     color.clear_color = {0, 0, 0, 1};
     color.load_op = SDL_GPU_LOADOP_CLEAR;
     color.store_op = SDL_GPU_STOREOP_STORE;
     auto* pass = SDL_BeginGPURenderPass(command.handle, &color, 1, nullptr);
-    if (!pass) return;
+    if (!pass) return false;
     SDL_BindGPUGraphicsPipeline(pass, host.bloom_pipeline());
     const SDL_GPUTextureSamplerBinding binding{host.hdr(), host.linear_clamp()};
     SDL_BindGPUFragmentSamplers(pass, 0, &binding, 1);
@@ -219,9 +219,10 @@ void apply_bloom(rhi::Host& host, rhi::Command& command, float threshold)
     SDL_PushGPUFragmentUniformData(command.handle, 0, &params, sizeof(params));
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
     SDL_EndGPURenderPass(pass);
+    return true;
 }
 
-void apply_tonemap(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, float exposure,
+bool apply_tonemap(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, float exposure,
                    float bloom_strength)
 {
     SDL_GPUColorTargetInfo color{};
@@ -230,7 +231,7 @@ void apply_tonemap(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapc
     color.load_op = SDL_GPU_LOADOP_CLEAR;
     color.store_op = SDL_GPU_STOREOP_STORE;
     auto* pass = SDL_BeginGPURenderPass(command.handle, &color, 1, nullptr);
-    if (!pass) return;
+    if (!pass) return false;
     SDL_BindGPUGraphicsPipeline(pass, host.tonemap_pipeline());
     SDL_GPUTexture* bloom = host.bloom() ? host.bloom() : host.hdr();
     const SDL_GPUTextureSamplerBinding bindings[2] = {
@@ -242,6 +243,7 @@ void apply_tonemap(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapc
     SDL_PushGPUFragmentUniformData(command.handle, 0, &exposure_bloom, sizeof(exposure_bloom));
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
     SDL_EndGPURenderPass(pass);
+    return true;
 }
 
 } // namespace forge::render

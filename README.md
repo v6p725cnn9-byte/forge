@@ -50,6 +50,11 @@ id = "M7"
 title = "Client-server"
 status = "done"
 
+[[milestones]]
+id = "G1"
+title = "Survival session and menu"
+status = "done"
+
 [[tasks]]
 id = "m0-repo"
 milestone = "M0"
@@ -283,6 +288,24 @@ id = "m7-stream"
 milestone = "M7"
 status = "done"
 title = "Interest management / stream distance"
+
+[[tasks]]
+id = "g1-session"
+milestone = "G1"
+status = "done"
+title = "Survival session, solo/host/join, settings and localized UI"
+
+[[tasks]]
+id = "g1-menu-vista"
+milestone = "G1"
+status = "done"
+title = "Procedural HDR menu vista, fog and image fallback"
+
+[[tasks]]
+id = "g1-stability"
+milestone = "G1"
+status = "done"
+title = "Network validation/reconnect, GPU cleanup and regression coverage"
 +++
 
 # Forge
@@ -314,7 +337,7 @@ python3 scripts/progress.py reopen m1-vbo
 
 Нужны CMake ≥ 3.24, Ninja, Python ≥ 3.9, Git, C++20 и SDL3 ≥ 3.2 (на этом Маке: Homebrew `sdl3`). Первая конфигурация тянет GLM, ImGui, libktx и Jolt Physics v5.6.0 через FetchContent.
 
-GLM — математика. SDL3 GPU — единственный RHI. ImGui — официальный SDL GPU backend, только Debug. libktx нужен для Basis/UASTC → ASTC/BC7/RGBA. Компилятор шейдеров в runtime не входит.
+GLM — математика. SDL3 GPU — единственный RHI. ImGui — официальный SDL GPU backend для диагностики и подписей старых лаб. libktx нужен для Basis/UASTC → ASTC/BC7/RGBA. Компилятор шейдеров в runtime не входит.
 
 ```bash
 cmake --preset macos-debug
@@ -334,7 +357,7 @@ FORGE_CONNECT=192.168.0.10:27015 ./build/forge   # сразу join, без ме�
 
 RMB — взгляд. M1/M2/M4: WASD полёт. M3: **F** ходьба/полёт, Space прыжок. M5/M6: WASD ходьба, **F** сесть/высадиться. M7: WASD по сети, боты стримятся по радиусу. F1 — панель. `FORGE_MODEL` подменяет glTF. `FORGE_GAMEMODE` подменяет скрипт. `FORGE_PORT` — UDP-порт (по умолчанию 27015).
 
-Release без ImGui и GPU debug validation:
+Release без панели диагностики и GPU debug validation:
 
 ```bash
 cmake --preset macos-release
@@ -342,7 +365,7 @@ cmake --build --preset macos-release
 ./build-release/forge
 ```
 
-`FORGE_DEV_UI=OFF` полностью исключает Dear ImGui из зависимостей и линковки. Shader assets ищутся рядом с исполняемым файлом, поэтому запуск не зависит от рабочего каталога.
+`FORGE_DEV_UI=OFF` отключает панель диагностики. ImGui остаётся в зависимостях для HUD и подписей старых лаб; меню и HUD survival используют собственный UI. Shader assets ищутся рядом с исполняемым файлом, поэтому запуск не зависит от рабочего каталога.
 
 ### Проверки
 
@@ -395,7 +418,8 @@ tests/m3             shadows + walk (остаётся)
 tests/m4             streaming city (остаётся)
 tests/m5             fox + car (остаётся)
 tests/m6             Lua gamemode (остаётся)
-tests/m7             UDP listen-server (latest)
+tests/m7             UDP listen-server
+tests/survival       главное меню и survival (latest)
 assets/scripts/      main.lua, net.lua
 shaders/             HLSL + cooked MSL/SPIR-V/DXIL
 ```
@@ -468,3 +492,22 @@ shaders/             HLSL + cooked MSL/SPIR-V/DXIL
 
 - [x] `m7-udp` — UDP тик
 - [x] `m7-stream` — stream distance
+
+
+### G1 Survival session and menu
+
+- [x] `g1-session` — сессия, ресурсы/костёр/эвакуация, solo/host/join, настройки и RU/EN UI
+- [x] `g1-menu-vista` — процедурный пейзаж, HDR, туман и резервный фон меню
+- [x] `g1-stability` — проверка UDP-пакетов, переподключение, освобождение GPU-ресурсов и регрессионные тесты
+
+Проверки стабильности: `net` проверяет чужие/устаревшие пакеты, NaN, лимит MTU,
+таймаут и переподключение без наследования инвентаря; `settings` — повреждённые значения.
+UI работает в координатах окна (включая Retina) и не теряет короткие клики между кадрами.
+Подключение ожидает ответ до трёх секунд по реальному времени, включая Release.
+GPU smoke запускает каждую лабу, меняет размер окна и проверяет ошибки старта.
+Для survival дополнительно проверяются 3D-меню и отказ при некорректном адресе подключения.
+Smoke использует временный файл настроек и не меняет пользовательский `settings.cfg`.
+
+Сетевой транспорт пока экспериментальный: без аутентификации, шифрования и гарантированной
+доставки одноразовых действий. Проверки на одном Mac не заменяют испытание между двумя
+машинами в LAN. Аудиоползунки сохраняются, подключение аудиодвижка ещё впереди.

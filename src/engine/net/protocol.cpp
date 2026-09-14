@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cmath>
 
 namespace forge::net {
 namespace {
@@ -51,7 +52,7 @@ struct Reader {
     const std::uint8_t* data = nullptr;
     std::size_t size = 0;
     std::size_t offset = 0;
-    bool need(std::size_t n) const { return offset + n <= size; }
+    bool need(std::size_t n) const { return data && offset <= size && n <= size - offset; }
     bool u8(std::uint8_t& v)
     {
         if (!need(1)) return false;
@@ -77,7 +78,7 @@ struct Reader {
         std::uint32_t bits = 0;
         if (!u32(bits)) return false;
         std::memcpy(&v, &bits, 4);
-        return true;
+        return std::isfinite(v);
     }
     bool pad(std::string& text, std::size_t width)
     {
@@ -90,6 +91,7 @@ struct Reader {
     }
     bool header(Packet expected)
     {
+        if (size > kMaxPacket) return false;
         std::uint32_t magic = 0;
         std::uint8_t type = 0, version = 0;
         std::uint16_t payload = 0;
@@ -148,9 +150,16 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
     w.u8(snapshot.self);
     w.u32(snapshot.ack);
     const auto count = static_cast<std::uint8_t>(std::min(snapshot.entities.size(), static_cast<std::size_t>(kMaxSnapshotEntities)));
-    w.u8(count);
+    const auto count_offset = w.bytes.size();
+    w.u8(0);
+    std::uint8_t written = 0;
     for (std::uint8_t i = 0; i < count; ++i) {
         const auto& e = snapshot.entities[i];
+        const std::size_t extra = e.kind == Kind::Player ? 16 : e.kind == Kind::Marker ? 7
+            : e.kind == Kind::Label ? 1 + std::min(e.text.size(), std::size_t{48}) : 0;
+        // Reserve the ten-byte survival trailer within the UDP budget.
+        if (w.bytes.size() + 18 + extra + 10 > kMaxPacket) break;
+        ++written;
         w.u8(static_cast<std::uint8_t>(e.kind));
         w.u8(e.id);
         w.f32(e.position.x);
@@ -169,6 +178,7 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
             for (std::uint8_t c = 0; c < n; ++c) w.u8(static_cast<std::uint8_t>(e.text[c]));
         }
     }
+    w.bytes[count_offset] = written;
     w.u8(snapshot.hp);
     w.u8(snapshot.cold);
     w.u16(snapshot.wood);
@@ -182,13 +192,14 @@ std::vector<std::uint8_t> pack_snapshot(const Snapshot& snapshot)
 
 bool unpack_type(const std::uint8_t* data, std::size_t size, Packet& type)
 {
-    if (size < 8) return false;
+    if (!data || size < 8 || size > kMaxPacket) return false;
     Reader r{data, size, 0};
     std::uint32_t magic = 0;
     std::uint8_t raw = 0, version = 0;
     std::uint16_t payload = 0;
     if (!r.u32(magic) || magic != kMagic) return false;
     if (!r.u8(raw) || !r.u8(version) || version != kVersion || !r.u16(payload)) return false;
+    if (payload != size - 8 || raw < 1 || raw > 4) return false;
     type = static_cast<Packet>(raw);
     return true;
 }
@@ -197,13 +208,14 @@ bool unpack_hello(const std::uint8_t* data, std::size_t size)
 {
     Reader r{data, size, 0};
     std::uint8_t version = 0;
-    return r.header(Packet::Hello) && r.u8(version) && version == kVersion;
+    return r.header(Packet::Hello) && r.u8(version) && version == kVersion && r.offset == size;
 }
 
 bool unpack_welcome(const std::uint8_t* data, std::size_t size, Welcome& welcome)
 {
     Reader r{data, size, 0};
-    return r.header(Packet::Welcome) && r.u8(welcome.player_id) && r.u8(welcome.tick_hz) && r.f32(welcome.stream_radius);
+    return r.header(Packet::Welcome) && r.u8(welcome.player_id) && r.u8(welcome.tick_hz) && r.f32(welcome.stream_radius)
+        && welcome.player_id < 32 && welcome.tick_hz > 0 && welcome.stream_radius > 0 && r.offset == size;
 }
 
 bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input)
@@ -211,7 +223,8 @@ bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input)
     Reader r{data, size, 0};
     std::uint8_t flags = 0;
     if (!r.header(Packet::Input) || !r.u32(input.seq) || !r.f32(input.move_x) || !r.f32(input.move_z) || !r.f32(input.yaw)
-        || !r.u8(flags))
+        || !r.u8(flags) || flags > 7 || r.offset != size
+        || std::abs(input.move_x) > 1.0f || std::abs(input.move_z) > 1.0f)
         return false;
     input.boost = (flags & 1) != 0;
     input.interact = (flags & 2) != 0;
@@ -223,7 +236,8 @@ bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snaps
 {
     Reader r{data, size, 0};
     std::uint8_t count = 0;
-    if (!r.header(Packet::Snapshot) || !r.u32(snapshot.tick) || !r.u8(snapshot.self) || !r.u32(snapshot.ack) || !r.u8(count))
+    if (!r.header(Packet::Snapshot) || !r.u32(snapshot.tick) || !r.u8(snapshot.self) || !r.u32(snapshot.ack) || !r.u8(count)
+        || count > kMaxSnapshotEntities || snapshot.self >= 32)
         return false;
     snapshot.entities.clear();
     snapshot.entities.reserve(count);
@@ -233,6 +247,7 @@ bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snaps
         if (!r.u8(kind) || !r.u8(ghost.id) || !r.f32(ghost.position.x) || !r.f32(ghost.position.y)
             || !r.f32(ghost.position.z) || !r.f32(ghost.yaw))
             return false;
+        if (kind < 1 || kind > 8) return false;
         ghost.kind = static_cast<Kind>(kind);
         if (ghost.kind == Kind::Player) {
             if (!r.pad(ghost.name, 16)) return false;
@@ -242,14 +257,16 @@ bool unpack_snapshot(const std::uint8_t* data, std::size_t size, Snapshot& snaps
             ghost.color = {cr / 255.0f, cg / 255.0f, cb / 255.0f, 1.0f};
         } else if (ghost.kind == Kind::Label) {
             std::uint8_t n = 0;
-            if (!r.u8(n) || !r.need(n)) return false;
+            if (!r.u8(n) || n > 48 || !r.need(n)) return false;
             ghost.text.assign(reinterpret_cast<const char*>(r.data + r.offset), n);
             r.offset += n;
         }
         snapshot.entities.push_back(std::move(ghost));
     }
     return r.u8(snapshot.hp) && r.u8(snapshot.cold) && r.u16(snapshot.wood) && r.u16(snapshot.stone)
-        && r.u8(snapshot.phase) && r.u16(snapshot.time_left) && r.u8(snapshot.night);
+        && r.u8(snapshot.phase) && r.u16(snapshot.time_left) && r.u8(snapshot.night)
+        && snapshot.hp <= 100 && snapshot.cold <= 100 && snapshot.phase <= 2 && snapshot.night <= 1
+        && r.offset == size;
 }
 
 } // namespace forge::net

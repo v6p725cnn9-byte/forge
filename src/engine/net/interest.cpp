@@ -15,6 +15,7 @@ float xz_distance(const glm::vec3& a, const glm::vec3& b)
 std::vector<Ghost> collect_stream(const script::Registry& world, const glm::vec3& observer, float radius,
                                   int observer_id, int cap)
 {
+    cap = std::clamp(cap, 0, kMaxSnapshotEntities);
     struct Ranked {
         float distance;
         Ghost ghost;
@@ -73,7 +74,12 @@ std::vector<Ghost> collect_stream(const script::Registry& world, const glm::vec3
         push(distance, std::move(ghost));
     }
 
-    std::sort(ranked.begin(), ranked.end(), [](const Ranked& a, const Ranked& b) { return a.distance < b.distance; });
+    std::stable_sort(ranked.begin(), ranked.end(), [observer_id](const Ranked& a, const Ranked& b) {
+        const bool a_self = a.ghost.kind == Kind::Player && a.ghost.id == observer_id;
+        const bool b_self = b.ghost.kind == Kind::Player && b.ghost.id == observer_id;
+        if (a_self != b_self) return a_self;
+        return a.distance < b.distance;
+    });
     if (static_cast<int>(ranked.size()) > cap) ranked.resize(static_cast<std::size_t>(cap));
     std::vector<Ghost> out;
     out.reserve(ranked.size());

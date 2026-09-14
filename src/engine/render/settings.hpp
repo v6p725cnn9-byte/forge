@@ -24,6 +24,9 @@ struct DebugState {
     float light_intensity = 3.2f;
     float light_azimuth = 35.0f;
     float light_elevation = 52.0f;
+    glm::vec3 light_color{1.0f, 0.96f, 0.90f};
+    glm::vec3 fog_color{0.55f, 0.45f, 0.38f};
+    float fog_density = 0.0f;
     float bloom = 0.0f;
     float shadow_strength = 1.0f;
     float stream_radius = 0.0f;

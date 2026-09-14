@@ -28,6 +28,8 @@ private:
     Udp socket_;
     Address server_{};
     bool connected_ = false;
+    bool have_snapshot_ = false;
+    std::chrono::steady_clock::time_point last_receive_{};
     std::uint8_t player_id_ = 255;
     std::uint32_t seq_ = 1;
     float ping_ms_ = 0;

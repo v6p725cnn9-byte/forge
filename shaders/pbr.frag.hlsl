@@ -11,6 +11,7 @@ cbuffer Shading : register(b0, space3)
     float4 tex_v[5];
     float4 cascade_splits;
     float4 shadow_params;
+    float4 fog_color_density;
     column_major float4x4 light_vp0;
     column_major float4x4 light_vp1;
     column_major float4x4 light_vp2;
@@ -159,5 +160,9 @@ float4 main(Input input) : SV_Target0
     const float3 specular = prefiltered * (F_ibl * brdf.x + brdf.y);
     const float3 indirect = (diffuse_color * irradiance + specular) * occlusion * light_dir_ibl.w;
 
-    return float4(direct + indirect + emissive, 1.0);
+    // Exp2 distance haze. Unlit (sky) returns above and stays clear.
+    const float fog_dist = length(input.world - camera_pos_mips.xyz);
+    const float fog_amount = 1.0 - exp(-fog_color_density.w * fog_color_density.w * fog_dist * fog_dist);
+    const float3 shaded = direct + indirect + emissive;
+    return float4(shaded * (1.0 - fog_amount) + fog_color_density.rgb * fog_amount, 1.0);
 }

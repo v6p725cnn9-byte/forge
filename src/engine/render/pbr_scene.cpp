@@ -32,9 +32,10 @@ struct FrameShading {
     glm::vec4 tex_v[5];
     glm::vec4 cascade_splits;
     glm::vec4 shadow_params;
+    glm::vec4 fog_color_density;
     glm::mat4 light_vp[3];
 };
-static_assert(sizeof(FrameShading) == 496);
+static_assert(sizeof(FrameShading) == 512);
 
 struct SamplerKey {
     int min_filter;
@@ -309,8 +310,8 @@ void PbrScene::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pass, SDL_
         FrameShading shading{};
         shading.camera_pos_mips = glm::vec4{camera_position, static_cast<float>(specular_mips)};
         shading.light_dir_ibl = glm::vec4{sun_direction(debug.light_azimuth, debug.light_elevation), debug.ibl_intensity};
-        shading.light_color_exposure =
-            glm::vec4{glm::vec3{1.0f, 0.96f, 0.90f} * debug.light_intensity, debug.exposure};
+        shading.light_color_exposure = glm::vec4{debug.light_color * debug.light_intensity, debug.exposure};
+        shading.fog_color_density = glm::vec4{debug.fog_color, debug.fog_density};
         shading.base_color = material.cpu.base_color_factor * color_mul;
         shading.emissive_metallic = glm::vec4{material.cpu.emissive_factor, material.cpu.metallic};
         shading.params = {material.cpu.roughness, material.cpu.normal_scale, material.cpu.occlusion_strength,
@@ -369,8 +370,8 @@ void PbrScene::draw_instanced(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* 
         FrameShading shading{};
         shading.camera_pos_mips = glm::vec4{camera_position, static_cast<float>(specular_mips)};
         shading.light_dir_ibl = glm::vec4{sun_direction(debug.light_azimuth, debug.light_elevation), debug.ibl_intensity};
-        shading.light_color_exposure =
-            glm::vec4{glm::vec3{1.0f, 0.96f, 0.90f} * debug.light_intensity, debug.exposure};
+        shading.light_color_exposure = glm::vec4{debug.light_color * debug.light_intensity, debug.exposure};
+        shading.fog_color_density = glm::vec4{debug.fog_color, debug.fog_density};
         shading.base_color = material.cpu.base_color_factor;
         shading.emissive_metallic = glm::vec4{material.cpu.emissive_factor, material.cpu.metallic};
         shading.params = {material.cpu.roughness, material.cpu.normal_scale, material.cpu.occlusion_strength,
@@ -424,8 +425,8 @@ void PbrScene::draw_skinned(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pa
         FrameShading shading{};
         shading.camera_pos_mips = glm::vec4{camera_position, static_cast<float>(specular_mips)};
         shading.light_dir_ibl = glm::vec4{sun_direction(debug.light_azimuth, debug.light_elevation), debug.ibl_intensity};
-        shading.light_color_exposure =
-            glm::vec4{glm::vec3{1.0f, 0.96f, 0.90f} * debug.light_intensity, debug.exposure};
+        shading.light_color_exposure = glm::vec4{debug.light_color * debug.light_intensity, debug.exposure};
+        shading.fog_color_density = glm::vec4{debug.fog_color, debug.fog_density};
         shading.base_color = material.cpu.base_color_factor;
         shading.emissive_metallic = glm::vec4{material.cpu.emissive_factor, material.cpu.metallic};
         shading.params = {material.cpu.roughness, material.cpu.normal_scale, material.cpu.occlusion_strength,

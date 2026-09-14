@@ -25,7 +25,7 @@ class Ui {
 public:
     bool create(rhi::Host& host);
     void destroy(rhi::Host& host);
-    void begin(int width, int height, float mouse_x, float mouse_y, bool mouse_down);
+    void begin(int width, int height, float mouse_x, float mouse_y, bool mouse_down, bool pressed = false, bool released = false);
     void feed_text(std::string_view utf8);
     void key_backspace();
     bool wants_text() const { return field_active_ != 0; }

@@ -17,6 +17,9 @@ def main():
     executable = args.executable.resolve()
     environment = dict(os.environ, FORGE_SMOKE="90", FORGE_SMOKE_RESIZE="1")
     with tempfile.TemporaryDirectory(prefix="forge-smoke-") as temporary:
+        for key in ("FORGE_CONNECT", "FORGE_PORT", "FORGE_SMOKE_MENU"):
+            environment.pop(key, None)
+        environment["FORGE_SETTINGS"] = str(pathlib.Path(temporary) / "settings.cfg")
         def run(binary, env, success):
             result = subprocess.run([str(binary)], env=env, cwd=temporary, capture_output=True, text=True, timeout=30)
             output = result.stdout + result.stderr
@@ -34,6 +37,11 @@ def main():
         for marker in ("failed:", "Validation Error", "validateRenderPassDescriptor", "Assertion failed"):
             if marker in output:
                 raise SystemExit("GPU validation failure: " + marker)
+        if executable.name in ("forge", "forge_survival", "forge.exe", "forge_survival.exe"):
+            output = run(executable, dict(environment, FORGE_SMOKE_MENU="1"), True)
+            if "Menu scene: vista" not in output or "Smoke passed: 90 frames presented" not in output:
+                raise SystemExit("3D menu smoke did not finish")
+            run(executable, dict(environment, FORGE_CONNECT="invalid"), False)
         run(executable, dict(environment, FORGE_SMOKE="invalid"), False)
         # A relocated executable without assets must fail, even when the source tree exists.
         isolated = pathlib.Path(temporary) / executable.name

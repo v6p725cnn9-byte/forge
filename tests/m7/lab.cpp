@@ -68,10 +68,12 @@ bool NetLab::setup(rhi::Host& host, Camera& camera)
         SDL_Log("UDP connect failed");
         return false;
     }
-    for (int i = 0; i < 40 && !client_.connected(); ++i) {
+    const auto handshake_deadline = SDL_GetTicks() + 3000;
+    while (!client_.connected() && SDL_GetTicks() < handshake_deadline) {
         client_.send_input(0, 0, yaw_, false);
-        server_.update(0.05f);
+        server_.update(0.002f);
         client_.poll();
+        if (!client_.connected()) SDL_Delay(2);
     }
     if (!client_.connected()) {
         SDL_Log("UDP handshake failed on port %u", server_.port());
@@ -196,7 +198,7 @@ rhi::FrameResult NetLab::draw(rhi::Host& host, rhi::Command& command, SDL_GPUTex
         }
     }
     SDL_EndGPURenderPass(pass);
-    render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f);
+    if (!render::apply_tonemap(host, command, swapchain, debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 

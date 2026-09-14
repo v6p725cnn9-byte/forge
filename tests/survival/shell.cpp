@@ -1,6 +1,9 @@
+#include "engine/app/background.hpp"
 #include "engine/app/lab.hpp"
 #include "engine/app/menu.hpp"
+#include "engine/app/menu_scene.hpp"
 #include "engine/app/settings.hpp"
+#include "engine/core/scope_exit.hpp"
 #include "engine/ui/ui.hpp"
 
 #include "lab.hpp"
@@ -27,6 +30,20 @@ void capture_mouse(rhi::Host& host, bool& captured, bool enable)
     captured = enable;
 }
 
+void begin_ui(ui::Ui& ui, SDL_Window* window, bool interactive, bool pressed, bool released, float event_x, float event_y)
+{
+    int width = 1, height = 1;
+    SDL_GetWindowSize(window, &width, &height);
+    float mx = 0, my = 0;
+    const auto buttons = SDL_GetMouseState(&mx, &my);
+    if (pressed || released) { mx = event_x; my = event_y; }
+    // Layout and hit testing use window coordinates, independent of Retina pixels.
+    // Shrink the whole canvas on small windows so every settings row remains reachable.
+    const float scale = std::min({1.0f, std::max(width, 1) / 640.0f, std::max(height, 1) / 720.0f});
+    ui.begin(static_cast<int>(width / scale), static_cast<int>(height / scale), mx / scale, my / scale,
+             interactive && (buttons & SDL_BUTTON_LMASK) != 0, interactive && pressed, interactive && released);
+}
+
 const std::vector<const char*> kShaders{"pbr.vert", "pbr.frag", "tonemap.vert", "tonemap.frag", "bloom.frag", "ui.vert",
                                         "ui.frag"};
 
@@ -50,14 +67,29 @@ int run_game(const char* window_title)
 
     rhi::Host host;
     if (!host.open(window_title, settings.width, settings.height, kShaders)) return 1;
-    host.apply_display(settings.width, settings.height, settings.fullscreen, settings.vsync);
+    if (!host.apply_display(settings.width, settings.height, settings.fullscreen, settings.vsync)) return 1;
     ui::Ui game_ui;
+    MenuBackground background;
+    MenuScene menu_scene;
+    std::unique_ptr<labs::SurvivalLab> session;
+    ScopeExit cleanup([&] {
+        if (session) session->teardown(host);
+        menu_scene.destroy(host);
+        background.destroy(host);
+        game_ui.destroy(host);
+    });
     if (!game_ui.create(host)) return 1;
+    if (!background.create(host)) SDL_Log("Continuing without a menu backdrop image");
+    const bool menu_backdrop = background.ready();
+    if (!menu_scene.create(host)) {
+        menu_scene.destroy(host);
+        SDL_Log("Continuing without a 3D menu scene");
+    }
+    const bool menu_3d = menu_scene.ready();
     if (host.overlay().visible()) host.overlay().toggle();
 
     Menu menu(settings);
     Settings applied = settings;
-    std::unique_ptr<labs::SurvivalLab> session;
     Camera camera;
     camera.sensitivity = settings.sensitivity;
     camera.invert_y = settings.invert_y;
@@ -66,7 +98,13 @@ int run_game(const char* window_title)
     Mode mode = Mode::Menu;
     labs::SessionLaunch launch{};
 
-    const bool skip_menu = smoke_frames > 0 || std::getenv("FORGE_CONNECT") != nullptr;
+    const bool skip_menu = (smoke_frames > 0 && !std::getenv("FORGE_SMOKE_MENU")) || std::getenv("FORGE_CONNECT") != nullptr;
+    launch.port = settings.port;
+    if (const char* env = std::getenv("FORGE_PORT")) {
+        const std::string_view value(env);
+        const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), launch.port);
+        if (error != std::errc{} || end != value.data() + value.size() || launch.port < 1 || launch.port > 65535) return 1;
+    }
     if (skip_menu) {
         launch.hosting = std::getenv("FORGE_CONNECT") == nullptr;
         launch.lan = false;
@@ -89,10 +127,19 @@ int run_game(const char* window_title)
 
     while (!quit) {
         LabInput input{};
+        bool pressed = false, released = false;
+        float event_x = 0, event_y = 0;
         pending_text.clear();
         pending_backspace = false;
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
+            if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+                && event.button.button == SDL_BUTTON_LEFT) {
+                pressed |= event.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+                released |= event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+                event_x = event.button.x;
+                event_y = event.button.y;
+            }
             if (mode == Mode::Play) host.overlay().process_event(event);
             if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) quit = true;
             if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST) capture_mouse(host, captured, false);
@@ -138,29 +185,34 @@ int run_game(const char* window_title)
                 return 1;
             command.has_swapchain = swapchain != nullptr;
             if (!swapchain) {
-                command.submit();
+                if (!command.submit()) return 1;
+                if (smoke_frames > 0 && SDL_GetTicks() - last_progress > 10000) return 1;
+                SDL_Delay(10);
                 continue;
             }
-            float mx = 0, my = 0;
-            const auto buttons = SDL_GetMouseState(&mx, &my);
-            int ww = 1, wh = 1;
-            SDL_GetWindowSize(host.window(), &ww, &wh);
-            mx *= static_cast<float>(width) / static_cast<float>(std::max(ww, 1));
-            my *= static_cast<float>(height) / static_cast<float>(std::max(wh, 1));
-            game_ui.begin(static_cast<int>(width), static_cast<int>(height), mx, my,
-                          (buttons & SDL_BUTTON_LMASK) != 0);
+            begin_ui(game_ui, host.window(), true, pressed, released, event_x, event_y);
             if (!pending_text.empty()) game_ui.feed_text(pending_text);
             if (pending_backspace) game_ui.key_backspace();
             if (game_ui.wants_text()) SDL_StartTextInput(host.window());
             else SDL_StopTextInput(host.window());
             const auto result = menu.draw(game_ui);
-            if (!game_ui.submit(host, command, swapchain, true, {0.04f, 0.06f, 0.05f, 1.0f})) return 1;
+            if (menu_3d) {
+                const float now_seconds = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+                if (!menu_scene.draw(host, command, swapchain, width, height, now_seconds)) return 1;
+                if (!game_ui.submit(host, command, swapchain, false, {})) return 1;
+            } else if (menu_backdrop) {
+                background.blit(command, swapchain, width, height);
+                if (!game_ui.submit(host, command, swapchain, false, {})) return 1;
+            } else if (!game_ui.submit(host, command, swapchain, true, {0.04f, 0.06f, 0.05f, 1.0f})) {
+                return 1;
+            }
             if (!command.submit()) return 1;
             if (settings.width != applied.width || settings.height != applied.height
                 || settings.fullscreen != applied.fullscreen || settings.vsync != applied.vsync) {
-                host.apply_display(settings.width, settings.height, settings.fullscreen, settings.vsync);
+                if (!host.apply_display(settings.width, settings.height, settings.fullscreen, settings.vsync)) return 1;
                 applied = settings;
             }
+            last_progress = SDL_GetTicks();
             ++presented;
             ++frames;
             if (result.command == MenuCommand::Quit) quit = true;
@@ -182,6 +234,7 @@ int run_game(const char* window_title)
                 }
                 camera.sensitivity = settings.sensitivity;
                 camera.invert_y = settings.invert_y;
+                SDL_StopTextInput(host.window());
                 mode = Mode::Play;
             }
             if (smoke_frames > 0 && presented >= smoke_frames) {
@@ -196,7 +249,9 @@ int run_game(const char* window_title)
             session->configure(launch);
             if (!session->setup(host, camera)) {
                 SDL_Log("Failed to start session");
+                session->teardown(host);
                 session.reset();
+                if (smoke_frames > 0) return 1;
                 mode = Mode::Menu;
                 menu.reset();
                 continue;
@@ -243,17 +298,9 @@ int run_game(const char* window_title)
         if (swapchain) {
             frame = session->draw(host, command, swapchain, width, height, camera, captured);
             if (frame == rhi::FrameResult::failed) return 1;
-            float mx = 0, my = 0;
-            const auto buttons = SDL_GetMouseState(&mx, &my);
-            int ww = 1, wh = 1;
-            SDL_GetWindowSize(host.window(), &ww, &wh);
-            mx *= static_cast<float>(width) / static_cast<float>(std::max(ww, 1));
-            my *= static_cast<float>(height) / static_cast<float>(std::max(wh, 1));
-            game_ui.begin(static_cast<int>(width), static_cast<int>(height), mx, my,
-                          !captured && (buttons & SDL_BUTTON_LMASK) != 0);
+            begin_ui(game_ui, host.window(), !captured, pressed, released, event_x, event_y);
             draw_game_hud(game_ui, session->debug_state());
-            draw_world_captions(game_ui, camera, session->debug_state(), static_cast<int>(width),
-                                static_cast<int>(height));
+            draw_world_captions(game_ui, camera, session->debug_state(), game_ui.width(), game_ui.height());
             if (!game_ui.submit(host, command, swapchain, false, {})) return 1;
             if (host.overlay().visible()) {
                 host.overlay().begin_frame();
@@ -266,7 +313,7 @@ int run_game(const char* window_title)
             if (!command.submit()) return 1;
             frame = rhi::FrameResult::presented;
         } else {
-            command.submit();
+            if (!command.submit()) return 1;
         }
 
         const Uint64 now = SDL_GetTicks();
@@ -284,7 +331,6 @@ int run_game(const char* window_title)
         if (smoke_frames > 0 && presented >= smoke_frames) {
             SDL_Log("Smoke passed: %d frames presented", presented);
             capture_mouse(host, captured, false);
-            session->teardown(host);
             return 0;
         }
         if (now - fps_anchor >= 1000) {
@@ -298,8 +344,6 @@ int run_game(const char* window_title)
     }
 
     capture_mouse(host, captured, false);
-    if (session) session->teardown(host);
-    game_ui.destroy(host);
     save_settings(settings);
     return smoke_frames > 0 ? 1 : 0;
 }

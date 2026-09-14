@@ -1,4 +1,5 @@
 #include "engine/app/lab.hpp"
+#include "engine/core/scope_exit.hpp"
 
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -38,10 +39,8 @@ int run_lab(Lab& lab, const char* window_title)
     rhi::Host host;
     Camera camera;
     if (!host.open(window_title, 1280, 720, lab.shaders())) return 1;
-    if (!lab.setup(host, camera)) {
-        lab.teardown(host);
-        return 1;
-    }
+    ScopeExit cleanup([&] { lab.teardown(host); });
+    if (!lab.setup(host, camera)) return 1;
 
     bool quit = false;
     bool captured = false;
@@ -127,7 +126,7 @@ int run_lab(Lab& lab, const char* window_title)
             if (!command.submit()) return 1;
             result = rhi::FrameResult::presented;
         } else {
-            command.submit();
+            if (!command.submit()) return 1;
         }
 
         const Uint64 now = SDL_GetTicks();
@@ -144,7 +143,6 @@ int run_lab(Lab& lab, const char* window_title)
         ++presented;
         if (smoke_frames > 0 && presented >= smoke_frames) {
             SDL_Log("Smoke passed: %d frames presented", presented);
-            lab.teardown(host);
             capture_mouse(host, captured, false);
             return 0;
         }
@@ -158,7 +156,6 @@ int run_lab(Lab& lab, const char* window_title)
         }
     }
     capture_mouse(host, captured, false);
-    lab.teardown(host);
     return smoke_frames > 0 ? 1 : 0;
 }
 

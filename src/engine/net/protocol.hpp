@@ -7,6 +7,12 @@
 
 namespace forge::net {
 
+constexpr bool sequence_newer(std::uint32_t candidate, std::uint32_t previous)
+{
+    const auto distance = candidate - previous;
+    return distance != 0 && distance < 0x80000000u;
+}
+
 constexpr std::uint32_t kMagic = 0x37475246u;
 constexpr std::uint8_t kVersion = 1;
 constexpr std::size_t kMaxPacket = 1400;

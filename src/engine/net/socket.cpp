@@ -33,10 +33,10 @@ void startup()
     WSAStartup(MAKEWORD(2, 2), &data);
     ready = true;
 }
-void set_nonblock(Handle fd)
+bool set_nonblock(Handle fd)
 {
     u_long mode = 1;
-    ioctlsocket(fd, FIONBIO, &mode);
+    return ioctlsocket(fd, FIONBIO, &mode) == 0;
 }
 int last_would_block() { return WSAGetLastError() == WSAEWOULDBLOCK; }
 void close_handle(Handle fd) { closesocket(fd); }
@@ -44,9 +44,10 @@ void close_handle(Handle fd) { closesocket(fd); }
 using Handle = int;
 constexpr Handle kInvalid = -1;
 void startup() {}
-void set_nonblock(Handle fd)
+bool set_nonblock(Handle fd)
 {
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+    const int flags = fcntl(fd, F_GETFL, 0);
+    return flags >= 0 && fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
 }
 int last_would_block() { return errno == EAGAIN || errno == EWOULDBLOCK || errno == ECONNREFUSED; }
 void close_handle(Handle fd) { ::close(fd); }
@@ -82,7 +83,7 @@ bool parse_address(const std::string& text, Address& out)
         const auto digits = text.substr(colon + 1);
         unsigned value = 0;
         const auto [end, err] = std::from_chars(digits.data(), digits.data() + digits.size(), value);
-        if (err != std::errc{} || end != digits.data() + digits.size() || value > 65535u) return false;
+        if (err != std::errc{} || end != digits.data() + digits.size() || value == 0 || value > 65535u) return false;
         port = static_cast<std::uint16_t>(value);
     }
     in_addr addr{};
@@ -100,9 +101,10 @@ bool Udp::open()
     close();
     const Handle fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (fd == kInvalid) return false;
-    set_nonblock(fd);
-    int reuse = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+    if (!set_nonblock(fd)) {
+        close_handle(fd);
+        return false;
+    }
 #ifdef _WIN32
     fd_ = static_cast<std::uintptr_t>(fd);
 #else

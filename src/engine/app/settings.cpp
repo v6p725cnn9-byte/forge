@@ -3,6 +3,8 @@
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <stdexcept>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -19,7 +21,25 @@ std::string trim(std::string s)
 
 bool truthy(const std::string& v)
 {
-    return v == "1" || v == "true" || v == "yes" || v == "on";
+    if (v == "1" || v == "true" || v == "yes" || v == "on") return true;
+    if (v == "0" || v == "false" || v == "no" || v == "off") return false;
+    throw std::invalid_argument("boolean");
+}
+
+int integer(const std::string& v)
+{
+    std::size_t end = 0;
+    const int result = std::stoi(v, &end);
+    if (end != v.size()) throw std::invalid_argument("integer");
+    return result;
+}
+
+float real(const std::string& v)
+{
+    std::size_t end = 0;
+    const float result = std::stof(v, &end);
+    if (end != v.size() || !std::isfinite(result)) throw std::invalid_argument("float");
+    return result;
 }
 
 } // namespace
@@ -51,16 +71,16 @@ bool load_settings(Settings& settings, const std::filesystem::path& path)
         if (key.empty()) continue;
         try {
             if (key == "language") settings.language = value;
-            else if (key == "width") settings.width = std::max(640, std::stoi(value));
-            else if (key == "height") settings.height = std::max(360, std::stoi(value));
+            else if (key == "width") settings.width = std::clamp(integer(value), 640, 7680);
+            else if (key == "height") settings.height = std::clamp(integer(value), 360, 4320);
             else if (key == "fullscreen") settings.fullscreen = truthy(value);
             else if (key == "vsync") settings.vsync = truthy(value);
-            else if (key == "master") settings.master = std::clamp(std::stof(value), 0.0f, 1.0f);
-            else if (key == "music") settings.music = std::clamp(std::stof(value), 0.0f, 1.0f);
-            else if (key == "sfx") settings.sfx = std::clamp(std::stof(value), 0.0f, 1.0f);
-            else if (key == "sensitivity") settings.sensitivity = std::clamp(std::stof(value), 0.01f, 1.0f);
+            else if (key == "master") settings.master = std::clamp(real(value), 0.0f, 1.0f);
+            else if (key == "music") settings.music = std::clamp(real(value), 0.0f, 1.0f);
+            else if (key == "sfx") settings.sfx = std::clamp(real(value), 0.0f, 1.0f);
+            else if (key == "sensitivity") settings.sensitivity = std::clamp(real(value), 0.01f, 1.0f);
             else if (key == "invert_y") settings.invert_y = truthy(value);
-            else if (key == "port") settings.port = std::clamp(std::stoi(value), 1, 65535);
+            else if (key == "port") settings.port = std::clamp(integer(value), 1, 65535);
             else if (key == "last_join") settings.last_join = value;
         } catch (...) {
             continue;
