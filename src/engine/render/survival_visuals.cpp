@@ -94,6 +94,8 @@ bool SurvivalVisuals::create(rhi::Host& host)
                 hip_bind_ = glm::inverse(skin.inverse_bind[j]);
                 hip_origin_ = glm::vec3(initial_pose.joints[j] * hip_bind_ * glm::vec4{0, 0, 0, 1});
             }
+            if (source.nodes[static_cast<std::size_t>(skin.joints[j])].name == "Head")
+                head_joint_ = static_cast<int>(j);
         }
         // Bounds must be measured after skinning: raw mesh coordinates are not the posed character.
         for (const auto& vertex : source.vertices) {
@@ -254,7 +256,8 @@ glm::vec3 SurvivalVisuals::player_position(std::uint8_t id, const glm::vec3& fal
 }
 
 void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pass, const net::Snapshot& snapshot,
-                          const glm::mat4& view_projection, const DebugState& debug, const glm::vec3& camera_position)
+                          const glm::mat4& view_projection, const DebugState& debug, const glm::vec3& camera_position,
+                          int headless_player)
 {
     triangles_ = 0;
     const auto draw = [&](const PbrScene& scene, const glm::mat4& transform, const glm::vec4& tint = glm::vec4{1}) {
@@ -268,15 +271,28 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
         if (ghost.kind == net::Kind::Player) {
             const auto& player = players_[ghost.id];
             if (!player.active) continue;
+            const auto& character = astronaut_.cpu();
+            const bool headless = static_cast<int>(ghost.id) == headless_player;
+            if (headless && character.skins.empty()) continue;
             // The simulation stores the pawn center one metre above its feet.
             const auto model = glm::translate(glm::mat4(1), player.position - glm::vec3{0, 1, 0})
                 * glm::rotate(glm::mat4(1), glm::radians(player.yaw), glm::vec3{0, 1, 0}) * astronaut_transform_;
             const CameraUniforms camera{view_projection, model};
             SDL_PushGPUVertexUniformData(command, 0, &camera, sizeof(camera));
-            if (astronaut_.cpu().skins.empty())
+            if (character.skins.empty()) {
                 astronaut_.draw(command, pass, pbr_, double_sided_, debug, camera_position);
-            else
+            } else if (headless && head_joint_ >= 0 && head_joint_ < player.palette.count
+                       && head_joint_ < static_cast<int>(character.skins[0].inverse_bind.size())) {
+                // CS2-style first person: collapse the head onto its own center so it
+                // culls away, while legs, torso and arms stay visible below the eye.
+                anim::Palette body = player.palette;
+                const auto& skin = character.skins[0];
+                body.joints[head_joint_] =
+                    anim::collapse_joint(player.palette.joints[head_joint_], skin.inverse_bind[head_joint_]);
+                astronaut_.draw_skinned(command, pass, skinned_, body, debug, camera_position);
+            } else {
                 astronaut_.draw_skinned(command, pass, skinned_, player.palette, debug, camera_position);
+            }
             triangles_ += astronaut_.triangle_count;
         } else if (ghost.kind == net::Kind::Tree) {
             const auto variant = static_cast<std::size_t>(ghost.id % trees_.size());

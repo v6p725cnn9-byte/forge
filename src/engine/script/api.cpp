@@ -1,5 +1,7 @@
 #include "engine/script/vm.hpp"
 
+#include "engine/core/camera.hpp"
+
 extern "C" {
 #include <lauxlib.h>
 #include <lua.h>
@@ -121,6 +123,40 @@ int destroy_label(lua_State* L)
     return 1;
 }
 
+Camera* bound_camera(lua_State* L)
+{
+    lua_getfield(L, LUA_REGISTRYINDEX, "forge.camera");
+    auto* camera = static_cast<Camera*>(lua_touserdata(L, -1));
+    lua_pop(L, 1);
+    return camera;
+}
+
+int camera_set_first_person(lua_State* L)
+{
+    auto* camera = bound_camera(L);
+    if (!camera) return fail(L, "no camera bound");
+    camera->person = CameraPerson::First;
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+int camera_set_third_person(lua_State* L)
+{
+    auto* camera = bound_camera(L);
+    if (!camera) return fail(L, "no camera bound");
+    camera->person = CameraPerson::Third;
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+int camera_get_current_person(lua_State* L)
+{
+    const auto* camera = bound_camera(L);
+    if (!camera) return fail(L, "no camera bound");
+    lua_pushstring(L, camera->is_first_person() ? "firstPerson" : "thirdPerson");
+    return 1;
+}
+
 const luaL_Reg natives[] = {
     {"SpawnPlayer", spawn_player},
     {"SpawnVehicle", spawn_vehicle},
@@ -137,13 +173,24 @@ const luaL_Reg natives[] = {
 
 } // namespace
 
-void register_api(lua_State* state, Registry& registry)
+void register_api(lua_State* state, Registry& registry, Camera* camera)
 {
     lua_pushlightuserdata(state, &registry);
     lua_setfield(state, LUA_REGISTRYINDEX, "forge.world");
+    lua_pushlightuserdata(state, camera);
+    lua_setfield(state, LUA_REGISTRYINDEX, "forge.camera");
     lua_pushglobaltable(state);
     luaL_setfuncs(state, natives, 0);
     lua_pop(state, 1);
+
+    lua_newtable(state);
+    lua_pushcfunction(state, camera_set_first_person);
+    lua_setfield(state, -2, "setFirstPerson");
+    lua_pushcfunction(state, camera_set_third_person);
+    lua_setfield(state, -2, "setThirdPerson");
+    lua_pushcfunction(state, camera_get_current_person);
+    lua_setfield(state, -2, "getCurrentPerson");
+    lua_setglobal(state, "camera");
 }
 
 } // namespace forge::script

@@ -1,5 +1,7 @@
 #include "engine/script/vm.hpp"
 
+#include "engine/core/camera.hpp"
+
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -57,6 +59,33 @@ int main()
                         "assert(id == nil)\n",
                         "cap"),
           vm.last_error().c_str());
+
+    forge::Camera camera;
+    check(camera.person == forge::CameraPerson::Third, "Camera must default to third person");
+    forge::script::Vm game;
+    check(game.open(world, &camera), game.last_error().c_str());
+    check(game.run_string("assert(camera.getCurrentPerson() == 'thirdPerson')\n"
+                          "assert(camera.setFirstPerson() == true)\n"
+                          "assert(camera.getCurrentPerson() == 'firstPerson')\n"
+                          "assert(camera.setThirdPerson() == true)\n"
+                          "assert(camera.getCurrentPerson() == 'thirdPerson')\n",
+                          "camera-person"),
+          game.last_error().c_str());
+    check(!camera.is_first_person(), "Lua setThirdPerson must reach the C++ camera");
+    check(game.run_string("camera.setFirstPerson()", "camera-first"), game.last_error().c_str());
+    check(camera.is_first_person(), "Lua setFirstPerson must flip the C++ camera");
+    camera.person = forge::CameraPerson::Third;
+    check(game.run_string("assert(camera.getCurrentPerson() == 'thirdPerson')", "camera-back"),
+          game.last_error().c_str());
+
+    forge::script::Vm headless;
+    check(headless.open(world), headless.last_error().c_str());
+    check(headless.run_string("local ok, err = camera.setFirstPerson()\n"
+                              "assert(ok == nil and err ~= nil)\n"
+                              "local view, msg = camera.getCurrentPerson()\n"
+                              "assert(view == nil and msg ~= nil)\n",
+                              "camera-unbound"),
+          headless.last_error().c_str());
 
     std::cout << "Script checks passed\n";
 }

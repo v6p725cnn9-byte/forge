@@ -38,7 +38,7 @@ bool NetLab::setup(rhi::Host& host, Camera& camera)
     }
     pbr_ = render::make_pbr_pipeline(host, false);
     if (!pbr_) return false;
-    if (!vm_.open(world_)) {
+    if (!vm_.open(world_, &camera)) {
         SDL_Log("Lua VM failed: %s", vm_.last_error().c_str());
         return false;
     }
@@ -84,7 +84,7 @@ bool NetLab::setup(rhi::Host& host, Camera& camera)
     debug_.model = "udp";
     debug_.gamemode = gamemode_name_.c_str();
     debug_.net_role = "listen";
-    debug_.help = "M7 UDP | WASD walk | Shift boost | RMB look | far bots stream in/out";
+    debug_.help = "M7 UDP | WASD walk | Space jump | Shift boost | RMB look | V 1st/3rd | far bots stream in/out";
     camera.position = {-6.0f, 3.0f, -8.0f};
     camera.look_at({0, 1, 0});
     camera.speed = 14.0f;
@@ -126,6 +126,14 @@ void NetLab::follow_camera(Camera& camera) const
 {
     const auto* player = self();
     if (!player) return;
+    if (camera.is_first_person()) {
+        // The 1.7 m avatar cube is centered 0.15 m above the pawn origin.
+        const glm::vec3 eye = player->position + glm::vec3{0.0f, 0.9f, 0.0f};
+        glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
+        if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
+        camera.position = eye + glm::normalize(flat) * 0.2f;
+        return;
+    }
     glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
     if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
     flat = glm::normalize(flat);
@@ -135,17 +143,18 @@ void NetLab::follow_camera(Camera& camera) const
 
 void NetLab::update(float dt, Camera& camera, const app::LabInput& input)
 {
+    if (input.toggle_person)
+        camera.person = camera.is_first_person() ? CameraPerson::Third : CameraPerson::First;
     server_.set_stream_radius(debug_.stream_radius > 1.0f ? debug_.stream_radius : net::kDefaultStreamRadius);
     glm::vec3 walk{0};
     if (input.captured) {
         const glm::vec3 forward = glm::normalize(glm::vec3{camera.forward().x, 0.0f, camera.forward().z}
                                                  + glm::vec3{0.0001f, 0, 0});
-        const glm::vec3 right = glm::normalize(glm::cross(forward, {0, 1, 0}));
-        walk = right * input.move.x + forward * input.move.z;
-        if (glm::length(glm::vec2(walk.x, walk.z)) > 0.05f)
-            yaw_ = glm::degrees(std::atan2(walk.x, walk.z));
+        walk = app::compose_walk(forward, input.move.x, input.move.z);
+        // The torso faces the camera; S strafes backwards, A/D strafe sideways.
+        yaw_ = camera.facing_yaw();
     }
-    client_.send_input(walk.x, walk.z, yaw_, input.boost);
+    client_.send_input(walk.x, walk.z, yaw_, input.boost, false, false, input.jump);
     server_.update(dt);
     client_.poll();
     vm_.call("on_update", dt);
@@ -186,6 +195,7 @@ rhi::FrameResult NetLab::draw(rhi::Host& host, rhi::Command& command, SDL_GPUTex
 
     for (const auto& ghost : client_.snapshot().entities) {
         if (ghost.kind == net::Kind::Player) {
+            if (ghost.id == client_.player_id() && camera.is_first_person()) continue;
             const glm::vec4 tint = ghost.id == client_.player_id() ? glm::vec4{0.95f, 0.45f, 0.18f, 1.0f}
                                                                    : glm::vec4{0.25f, 0.62f, 0.85f, 1.0f};
             draw_cube(cube_at(ghost.position + glm::vec3{0.0f, 0.15f, 0.0f}, {0.55f, 1.7f, 0.55f}, ghost.yaw), tint);

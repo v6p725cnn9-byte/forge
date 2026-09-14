@@ -60,6 +60,10 @@ int main()
     Input input_out{};
     check(unpack_input(input_bytes.data(), input_bytes.size(), input_out), "input unpack");
     check(input_out.seq == 7 && input_out.boost && std::abs(input_out.yaw - 45.0f) < 1e-4f, "input fields");
+    check(!input_out.jump, "jump defaults to false");
+    input.jump = true;
+    const auto jump_bytes = pack_input(input);
+    check(unpack_input(jump_bytes.data(), jump_bytes.size(), input_out) && input_out.jump, "jump flag round-trips");
 
     check(sequence_newer(0, 0xffffffffu) && !sequence_newer(0xffffffffu, 0)
           && !sequence_newer(5, 5), "sequence wrap and duplicate ordering");

@@ -14,6 +14,13 @@ glm::vec3 Camera::forward() const
     return {std::cos(y) * std::cos(p), std::sin(p), std::sin(y) * std::cos(p)};
 }
 
+float Camera::facing_yaw() const
+{
+    const glm::vec3 flat{forward().x, 0.0f, forward().z};
+    if (glm::length(flat) < 1e-6f) return yaw;
+    return glm::degrees(std::atan2(flat.x, flat.z));
+}
+
 glm::mat4 Camera::view() const
 {
     return glm::lookAtRH(position, position + forward(), glm::vec3{0.0f, 1.0f, 0.0f});

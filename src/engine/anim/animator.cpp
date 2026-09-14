@@ -138,6 +138,17 @@ bool compute_palette(const assets::Scene& scene, int skin, const std::vector<glm
     return true;
 }
 
+glm::mat4 collapse_joint(const glm::mat4& skinning, const glm::mat4& inverse_bind)
+{
+    // Skinning maps bind-pose vertices into animated model space (S = G * B), so the
+    // joint center in that space is the skinning matrix applied to the joint origin
+    // mapped back into the bind pose.
+    const glm::vec4 center = skinning * glm::inverse(inverse_bind) * glm::vec4{0.0f, 0.0f, 0.0f, 1.0f};
+    glm::mat4 collapsed(0.0f);
+    collapsed[3] = glm::vec4{glm::vec3(center) / std::max(center.w, 1e-6f), 1.0f};
+    return collapsed;
+}
+
 bool evaluate(const assets::Scene& scene, int skin, int clip, float time, Palette& out)
 {
     std::vector<glm::vec3> translation, scale;

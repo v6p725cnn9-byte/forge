@@ -116,7 +116,7 @@ bool SurvivalLab::setup(rhi::Host& host, Camera& camera)
     debug_.survival = true;
     debug_.stream_radius = 70.0f;
     debug_.net_role = hosting_ ? "host" : "client";
-    debug_.help = "WASD walk | E chop/extract | C campfire | Shift run | RMB look";
+    debug_.help = "WASD walk | Space jump | E chop/extract | C campfire | Shift run | RMB look | V 1st/3rd";
     std::snprintf(debug_.join_hint, sizeof(debug_.join_hint), "%s", join_line_.c_str());
     camera.position = {-8.0f, 4.0f, -6.0f};
     camera.look_at({0, 1, 4});
@@ -168,26 +168,36 @@ void SurvivalLab::follow_camera(Camera& camera) const
 {
     const auto* player = self();
     if (!player) return;
+    const auto position = visuals_.player_position(player->id, player->position);
+    if (camera.is_first_person()) {
+        // Eye ~1.6 m above the feet; the sim stores the pawn center 1 m above them.
+        // Mouse yaw/pitch stay untouched so RMB look aims the view.
+        const glm::vec3 eye = position + glm::vec3{0.0f, 0.62f, 0.0f};
+        glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
+        if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
+        camera.position = eye + glm::normalize(flat) * 0.2f;
+        return;
+    }
     glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
     if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
     flat = glm::normalize(flat);
-    const auto position = visuals_.player_position(player->id, player->position);
     camera.position = position - flat * 7.0f + glm::vec3{0.0f, 2.6f, 0.0f};
     camera.look_at(position + glm::vec3{0.0f, 0.8f, 0.0f});
 }
 
 void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
 {
+    if (input.toggle_person)
+        camera.person = camera.is_first_person() ? CameraPerson::Third : CameraPerson::First;
     glm::vec3 walk{0};
     if (input.captured) {
         const glm::vec3 forward = glm::normalize(glm::vec3{camera.forward().x, 0.0f, camera.forward().z}
                                                  + glm::vec3{0.0001f, 0, 0});
-        const glm::vec3 right = glm::normalize(glm::cross(forward, {0, 1, 0}));
-        walk = right * input.move.x + forward * input.move.z;
-        if (glm::length(glm::vec2(walk.x, walk.z)) > 0.05f)
-            yaw_ = glm::degrees(std::atan2(walk.x, walk.z));
+        walk = app::compose_walk(forward, input.move.x, input.move.z);
+        // The torso faces the camera; S strafes backwards, A/D strafe sideways.
+        yaw_ = camera.facing_yaw();
     }
-    client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place);
+    client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place, input.jump);
     if (hosting_) server_.update(dt);
     client_.poll();
     visuals_.update(client_.snapshot(), client_.player_id(), dt, input.interact || input.place);
@@ -232,7 +242,10 @@ rhi::FrameResult SurvivalLab::draw(rhi::Host& host, rhi::Command& command, SDL_G
             draw_cube(cube_at(ghost.position + glm::vec3{0, 1.6f, 0}, {1.2f, 3.2f, 1.2f}), {0.25f, 0.75f, 0.95f, 1});
         }
     }
-    visuals_.draw(command.handle, pass, client_.snapshot(), camera_ubo.view_projection, debug_, camera.position);
+    const int headless_self =
+        camera.is_first_person() ? static_cast<int>(client_.player_id()) : -1;
+    visuals_.draw(command.handle, pass, client_.snapshot(), camera_ubo.view_projection, debug_, camera.position,
+                  headless_self);
     SDL_EndGPURenderPass(pass);
     if (!render::apply_bloom(host, command, 1.1f)) return rhi::FrameResult::failed;
     if (!render::apply_tonemap(host, command, swapchain, night ? 0.7f : debug_.exposure, 0.09f)) return rhi::FrameResult::failed;

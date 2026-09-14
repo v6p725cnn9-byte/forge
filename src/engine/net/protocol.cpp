@@ -137,6 +137,7 @@ std::vector<std::uint8_t> pack_input(const Input& input)
     if (input.boost) flags |= 1;
     if (input.interact) flags |= 2;
     if (input.place) flags |= 4;
+    if (input.jump) flags |= 8;
     w.u8(flags);
     w.finish();
     return w.bytes;
@@ -223,12 +224,13 @@ bool unpack_input(const std::uint8_t* data, std::size_t size, Input& input)
     Reader r{data, size, 0};
     std::uint8_t flags = 0;
     if (!r.header(Packet::Input) || !r.u32(input.seq) || !r.f32(input.move_x) || !r.f32(input.move_z) || !r.f32(input.yaw)
-        || !r.u8(flags) || flags > 7 || r.offset != size
+        || !r.u8(flags) || flags > 15 || r.offset != size
         || std::abs(input.move_x) > 1.0f || std::abs(input.move_z) > 1.0f)
         return false;
     input.boost = (flags & 1) != 0;
     input.interact = (flags & 2) != 0;
     input.place = (flags & 4) != 0;
+    input.jump = (flags & 8) != 0;
     return true;
 }
 

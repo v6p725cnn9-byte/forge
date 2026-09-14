@@ -8,6 +8,10 @@
 
 struct lua_State;
 
+namespace forge {
+class Camera;
+}
+
 namespace forge::script {
 
 class Vm {
@@ -17,7 +21,11 @@ public:
     Vm(const Vm&) = delete;
     Vm& operator=(const Vm&) = delete;
 
-    bool open(Registry& world);
+    // When a camera is bound, the gamemode gains a `camera` table:
+    // camera.setFirstPerson(), camera.setThirdPerson() and
+    // camera.getCurrentPerson() ("firstPerson" or "thirdPerson").
+    // The table mutates the live camera, so Lua and C++ always agree.
+    bool open(Registry& world, Camera* camera = nullptr);
     void close();
     bool run_file(const std::filesystem::path& path);
     bool run_string(std::string_view source, const char* name = "chunk");
@@ -32,6 +40,6 @@ private:
     std::string error_;
 };
 
-void register_api(lua_State* state, Registry& world);
+void register_api(lua_State* state, Registry& world, Camera* camera = nullptr);
 
 } // namespace forge::script

@@ -107,8 +107,7 @@ void SkinVehicleLab::update(float dt, Camera& camera, const app::LabInput& input
     if (!driving_ && input.captured) {
         const glm::vec3 forward = glm::normalize(glm::vec3{camera.forward().x, 0.0f, camera.forward().z}
                                                  + glm::vec3{0.0001f, 0, 0});
-        const glm::vec3 right = glm::normalize(glm::cross(forward, {0, 1, 0}));
-        walk = right * input.move.x + forward * input.move.z;
+        walk = app::compose_walk(forward, input.move.x, input.move.z);
         if (input.boost) walk *= 1.7f;
         if (glm::length(glm::vec2(walk.x, walk.z)) > 0.05f)
             character_yaw_ = glm::degrees(std::atan2(walk.x, walk.z));

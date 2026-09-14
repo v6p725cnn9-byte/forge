@@ -66,6 +66,7 @@ int run_lab(Lab& lab, const char* window_title)
                 }
                 if (event.key.key == SDLK_F1) host.overlay().toggle();
                 if (event.key.key == SDLK_F) input.toggle_walk = true;
+                if (event.key.key == SDLK_V) input.toggle_person = true;
                 if (captured && !host.overlay().wants_keyboard()) {
                     if (event.key.key == SDLK_E) input.interact = true;
                     if (event.key.key == SDLK_C) input.place = true;

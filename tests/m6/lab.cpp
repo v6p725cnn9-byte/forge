@@ -34,7 +34,7 @@ bool LuaGamemodeLab::setup(rhi::Host& host, Camera& camera)
     physics_.add_box({0.0f, -0.5f, 0.0f}, {40.0f, 0.5f, 40.0f});
     physics_.add_box({10.0f, 0.5f, -6.0f}, {1.5f, 0.5f, 1.5f});
 
-    if (!vm_.open(world_)) {
+    if (!vm_.open(world_, &camera)) {
         SDL_Log("Lua VM failed: %s", vm_.last_error().c_str());
         return false;
     }
@@ -58,7 +58,7 @@ bool LuaGamemodeLab::setup(rhi::Host& host, Camera& camera)
     debug_.model = "gamemode";
     debug_.has_vehicle = has_car_;
     debug_.gamemode = gamemode_name_.c_str();
-    debug_.help = "M6 Lua | WASD walk/drive | F enter/exit | Space jump/brake | RMB look";
+    debug_.help = "M6 Lua | WASD walk/drive | F enter/exit | Space jump/brake | RMB look | V 1st/3rd";
     camera.position = character_ + glm::vec3{-5.0f, 2.4f, -6.0f};
     camera.look_at(character_);
     camera.speed = 12.0f;
@@ -95,6 +95,14 @@ void LuaGamemodeLab::sync_debug()
 void LuaGamemodeLab::follow_camera(Camera& camera) const
 {
     const glm::vec3 target = driving_ && has_car_ ? physics_.vehicle_position() : character_;
+    if (camera.is_first_person() && !driving_) {
+        // Jolt keeps the capsule center in character_; the eyes sit just below its top.
+        const glm::vec3 eye = target + glm::vec3{0.0f, 0.55f, 0.0f};
+        glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
+        if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
+        camera.position = eye + glm::normalize(flat) * 0.2f;
+        return;
+    }
     glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
     if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
     flat = glm::normalize(flat);
@@ -104,6 +112,8 @@ void LuaGamemodeLab::follow_camera(Camera& camera) const
 
 void LuaGamemodeLab::update(float dt, Camera& camera, const app::LabInput& input)
 {
+    if (input.toggle_person)
+        camera.person = camera.is_first_person() ? CameraPerson::Third : CameraPerson::First;
     if (input.toggle_walk && has_car_ && world_.vehicle(0)) {
         const float distance = glm::length(physics_.vehicle_position() - character_);
         if (driving_) {
@@ -122,11 +132,10 @@ void LuaGamemodeLab::update(float dt, Camera& camera, const app::LabInput& input
     if (!driving_ && input.captured) {
         const glm::vec3 forward = glm::normalize(glm::vec3{camera.forward().x, 0.0f, camera.forward().z}
                                                  + glm::vec3{0.0001f, 0, 0});
-        const glm::vec3 right = glm::normalize(glm::cross(forward, {0, 1, 0}));
-        walk = right * input.move.x + forward * input.move.z;
+        walk = app::compose_walk(forward, input.move.x, input.move.z);
         if (input.boost) walk *= 1.7f;
-        if (glm::length(glm::vec2(walk.x, walk.z)) > 0.05f)
-            character_yaw_ = glm::degrees(std::atan2(walk.x, walk.z));
+        // The torso faces the camera; S strafes backwards, A/D strafe sideways.
+        character_yaw_ = camera.facing_yaw();
     }
     if (driving_ && input.captured)
         physics_.set_vehicle_input(input.move.z, input.move.x, input.jump ? 1.0f : 0.0f);
@@ -192,6 +201,7 @@ rhi::FrameResult LuaGamemodeLab::draw(rhi::Host& host, rhi::Command& command, SD
         const auto* player = world_.player(id);
         if (!player) continue;
         if (id == 0 && driving_) continue;
+        if (id == 0 && camera.is_first_person()) continue;
         const glm::vec4 tint = id == 0 ? glm::vec4{0.95f, 0.45f, 0.18f, 1.0f} : glm::vec4{0.25f, 0.62f, 0.85f, 1.0f};
         draw_cube(cube_at(player->position + glm::vec3{0.0f, 0.15f, 0.0f}, {0.55f, 1.7f, 0.55f}, player->yaw), tint);
     }

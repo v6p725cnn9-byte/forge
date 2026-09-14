@@ -164,7 +164,7 @@ add_library(forge_script STATIC
     src/engine/script/vm.cpp
 )
 target_include_directories(forge_script PUBLIC src)
-target_link_libraries(forge_script PUBLIC lua_static glm::glm)
+target_link_libraries(forge_script PUBLIC lua_static glm::glm forge_camera)
 if(MSVC)
     target_compile_options(forge_script PRIVATE /W4 /permissive-)
 else()
@@ -344,6 +344,10 @@ if(BUILD_TESTING)
     add_executable(ui_tests tests/ui_tests.cpp)
     target_link_libraries(ui_tests PRIVATE forge_engine)
     add_test(NAME ui_font COMMAND ui_tests)
+
+    add_executable(app_tests tests/app_tests.cpp)
+    target_link_libraries(app_tests PRIVATE forge_engine forge_net)
+    add_test(NAME app COMMAND app_tests)
     set_tests_properties(ui_font PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
     add_test(NAME shader_assets COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/cook_shaders.py --check)

@@ -13,11 +13,32 @@ void check(bool condition, const char* message)
     }
 }
 bool near(float a, float b) { return std::abs(a - b) < 0.0001f; }
+bool near_angle(float a, float b) { return std::abs(std::remainder(a - b, 360.0f)) < 0.001f; }
 }
 
 int main()
 {
     forge::Camera camera;
+    check(camera.person == forge::CameraPerson::Third, "Default view must be third person");
+    check(!camera.is_first_person(), "Default camera must not report first person");
+    camera.person = forge::CameraPerson::First;
+    check(camera.is_first_person(), "First person flag must follow the mode");
+    camera.person = forge::CameraPerson::Third;
+    camera.yaw = 0;
+    camera.pitch = 0;
+    check(near_angle(camera.facing_yaw(), 90.0f), "Facing yaw must map +X view to 90 deg");
+    camera.yaw = -90;
+    check(near_angle(camera.facing_yaw(), 180.0f), "Facing yaw must map -Z view to 180 deg");
+    camera.pitch = 45;
+    check(near_angle(camera.facing_yaw(), 180.0f), "Facing yaw must ignore pitch");
+    for (const float degrees : {-180.0f, -45.0f, 30.0f, 135.0f}) {
+        camera.yaw = degrees;
+        camera.pitch = -10;
+        const float face = camera.facing_yaw();
+        const glm::vec3 pawn{std::sin(glm::radians(face)), 0.0f, std::cos(glm::radians(face))};
+        const glm::vec3 flat = glm::normalize(glm::vec3{camera.forward().x, 0.0f, camera.forward().z});
+        check(glm::length(pawn - flat) < 0.0001f, "Pawn forward must match the camera view direction");
+    }
     const auto eye = camera.view() * glm::vec4(camera.position, 1.0f);
     check(glm::length(glm::vec3(eye)) < 0.0001f, "View must transform camera position to origin");
     const auto proj = camera.projection(16.0f / 9.0f);

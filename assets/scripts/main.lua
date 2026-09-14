@@ -1,6 +1,9 @@
 -- Forge M6 gamemode. SA-MP-style natives, no os/io.
+-- Camera view: camera.setFirstPerson(), camera.setThirdPerson(),
+-- camera.getCurrentPerson() returns "firstPerson" or "thirdPerson".
 
 function on_init()
+    camera.setThirdPerson()
     local me = SpawnPlayer(0.0, 1.0, 0.0)
     SetPlayerName(me, "Player")
     SpawnPlayer(5.0, 1.0, 4.0)

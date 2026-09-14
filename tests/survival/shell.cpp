@@ -162,6 +162,7 @@ int run_game(const char* window_title)
                 }
                 if (mode == Mode::Play && event.key.key == SDLK_F1) host.overlay().toggle();
                 if (mode == Mode::Play && event.key.key == SDLK_F) input.toggle_walk = true;
+                if (mode == Mode::Play && event.key.key == SDLK_V) input.toggle_person = true;
                 if (mode == Mode::Play && captured && !host.overlay().wants_keyboard()) {
                     if (event.key.key == SDLK_E) input.interact = true;
                     if (event.key.key == SDLK_C) input.place = true;

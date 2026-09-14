@@ -41,6 +41,7 @@ struct Input {
     bool boost = false;
     bool interact = false;
     bool place = false;
+    bool jump = false;
 };
 
 struct Ghost {

@@ -22,5 +22,9 @@ void compute_globals(const assets::Scene& scene, const std::vector<glm::vec3>& t
                      std::vector<glm::mat4>& globals);
 bool compute_palette(const assets::Scene& scene, int skin, const std::vector<glm::mat4>& globals, Palette& out);
 bool evaluate(const assets::Scene& scene, int skin, int clip, float time, Palette& out);
+// Collapse a joint's skinning matrix onto the joint center so attached triangles
+// degenerate and cull away. Used for a headless first-person body: legs and torso
+// stay visible, the head no longer blocks the eye camera.
+glm::mat4 collapse_joint(const glm::mat4& skinning, const glm::mat4& inverse_bind);
 
 } // namespace forge::anim

@@ -133,7 +133,22 @@ void Server::simulate(float dt)
             player->position += move * speed * dt;
             player->yaw = peer.input.yaw;
         }
-        player->position.y = 1.0f;
+        // Plain projectile gravity; the pawn center rests 1 m above the feet.
+        constexpr float kGroundY = 1.0f;
+        constexpr float kGravity = 16.0f;
+        constexpr float kJumpSpeed = 6.0f;
+        const bool grounded = player->position.y <= kGroundY + 1e-4f;
+        if (grounded && peer.input.jump) peer.vertical_velocity = kJumpSpeed;
+        if (!grounded || peer.vertical_velocity != 0.0f) {
+            peer.vertical_velocity -= kGravity * dt;
+            player->position.y += peer.vertical_velocity * dt;
+            if (player->position.y <= kGroundY) {
+                player->position.y = kGroundY;
+                peer.vertical_velocity = 0.0f;
+            }
+        } else {
+            player->position.y = kGroundY;
+        }
         if (sim_ && peer.pending_interact) {
             sim_->try_extract(peer.player_id, *world_);
             sim_->harvest(peer.player_id, *world_);

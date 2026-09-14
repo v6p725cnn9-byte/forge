@@ -49,6 +49,20 @@ int main()
     check(forge::anim::evaluate(fox, 0, forge::anim::find_clip(fox, "Walk"), 0.3f, fox_palette), "Fox walk palette");
     check(fox_palette.count == 24, "Fox palette uses every joint");
 
+    const int head_like = 1;
+    const glm::mat4 collapsed =
+        forge::anim::collapse_joint(fox_palette.joints[head_like], fox.skins[0].inverse_bind[head_like]);
+    const glm::vec4 at_a = collapsed * glm::vec4{1.0f, 2.0f, 3.0f, 1.0f};
+    const glm::vec4 at_b = collapsed * glm::vec4{-4.0f, 0.5f, 8.0f, 1.0f};
+    check(std::abs(at_a.w - 1.0f) < 1e-5f, "Collapsed joint keeps w=1");
+    check(glm::length(glm::vec3(at_a - at_b)) < 1e-4f, "Collapsed joint maps every vertex to one point");
+    const glm::vec4 joint_center = fox_palette.joints[head_like] * glm::inverse(fox.skins[0].inverse_bind[head_like])
+        * glm::vec4{0.0f, 0.0f, 0.0f, 1.0f};
+    check(glm::length(glm::vec3(at_a) - glm::vec3(joint_center) / joint_center.w) < 1e-3f,
+          "Collapsed point must sit at the joint center");
+    for (int c = 0; c < 4; ++c)
+        for (int r = 0; r < 4; ++r) check(std::isfinite(collapsed[c][r]), "Collapsed matrix must stay finite");
+
     std::cout << "Skin checks passed (" << fox.vertices.size() << " fox verts, " << fox.animations.size()
               << " clips)\n";
 }

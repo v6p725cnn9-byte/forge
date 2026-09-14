@@ -33,6 +33,7 @@ private:
         std::uint32_t last_seq = 0;
         bool pending_interact = false;
         bool pending_place = false;
+        float vertical_velocity = 0.0f;
         std::chrono::steady_clock::time_point last_recv{};
     };
 

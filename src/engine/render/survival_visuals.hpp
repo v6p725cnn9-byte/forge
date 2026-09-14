@@ -14,7 +14,8 @@ public:
     void destroy(rhi::Host& host);
     void update(const net::Snapshot& snapshot, std::uint8_t local_player, float dt, bool interact);
     void draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pass, const net::Snapshot& snapshot,
-              const glm::mat4& view_projection, const DebugState& debug, const glm::vec3& camera_position);
+              const glm::mat4& view_projection, const DebugState& debug, const glm::vec3& camera_position,
+              int headless_player = -1);
     glm::vec3 player_position(std::uint8_t id, const glm::vec3& fallback) const;
     std::uint32_t triangles() const { return triangles_; }
 
@@ -38,6 +39,7 @@ private:
     void animate(PlayerVisual& player, float dt);
     void remove_root_motion(anim::Palette& palette) const;
     int hip_joint_ = -1;
+    int head_joint_ = -1;
     glm::mat4 hip_bind_{1};
     glm::vec3 hip_origin_{0};
     PbrScene astronaut_;

@@ -15,7 +15,8 @@ class Client {
 public:
     bool connect(const Address& server);
     void close();
-    void send_input(float move_x, float move_z, float yaw, bool boost, bool interact = false, bool place = false);
+    void send_input(float move_x, float move_z, float yaw, bool boost, bool interact = false, bool place = false,
+                    bool jump = false);
     void poll();
     bool connected() const { return connected_; }
     std::uint8_t player_id() const { return player_id_; }

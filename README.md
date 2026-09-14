@@ -122,6 +122,30 @@ status = "done"
 title = "Align imported astronaut walk, remove hip root motion and attach player label"
 
 [[tasks]]
+id = "g1-camera-person"
+milestone = "G1"
+status = "done"
+title = "First-person view alongside third-person, Lua camera.setFirstPerson/setThirdPerson/getCurrentPerson"
+
+[[tasks]]
+id = "g1-jump-headless"
+milestone = "G1"
+status = "done"
+title = "Server-authoritative jump over UDP and CS2-style headless first-person body"
+
+[[tasks]]
+id = "g1-strafe-facing"
+milestone = "G1"
+status = "done"
+title = "Body faces the camera while strafing and backpedaling, no 180-degree flip on S"
+
+[[tasks]]
+id = "g1-diagonal-walk"
+milestone = "G1"
+status = "done"
+title = "Normalize diagonal WASD so packets pass input validation and diagonals move"
+
+[[tasks]]
 id = "m0-windows-local-launch"
 milestone = "M0"
 status = "done"
@@ -526,3 +550,7 @@ Smoke использует временный файл настроек и не 
 машинами в LAN. Аудиоползунки сохраняются, подключение аудиодвижка ещё впереди.
 
 - [x] `g1-astronaut-walk-alignment` — направление космонавта, ходьба на месте и привязка ника
+- [x] `g1-camera-person` — first-person рядом с third-person, Lua camera.setFirstPerson/setThirdPerson/getCurrentPerson
+- [x] `g1-jump-headless` — прыжок через UDP с гравитацией на сервере и тело от 1-го лица без головы как в CS2
+- [x] `g1-strafe-facing` — тело смотрит за камерой, S/A/D идут стрейфом без разворота на 180°
+- [x] `g1-diagonal-walk` — нормализация диагоналей WASD, пакеты проходят валидацию, диагонали двигают
