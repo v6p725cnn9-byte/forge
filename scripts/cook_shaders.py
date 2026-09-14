@@ -36,7 +36,7 @@ def digest(path):
 
 
 def inputs():
-    return {str(path.relative_to(ROOT)): digest(path)
+    return {path.relative_to(ROOT).as_posix(): digest(path)
             for path in sorted(SHADERS.glob("*.hlsl"))} | {"scripts/cook_shaders.py": digest(pathlib.Path(__file__))}
 
 

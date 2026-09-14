@@ -1,0 +1,2 @@
+User-provided tripo_model_cc580de5_rigged_meshopt.glb. Meshopt compression decoded for engine compatibility; geometry, textures and 41-joint rig preserved. No animation clips in the supplied asset. License not supplied; this is not the Quaternius model.
+Walk.glb: user-provided tripo_model_cc580de5_walk_retargeted.glb. Its 126 animation channels are mapped by bone name and embedded as Walk in Astronaut.glb. The original geometry, textures and rig are retained.

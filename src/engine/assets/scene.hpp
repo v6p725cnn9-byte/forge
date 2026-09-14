@@ -74,7 +74,7 @@ struct Primitive {
     int skin = -1;
 };
 
-constexpr int kMaxJoints = 48;
+constexpr int kMaxJoints = 64;
 
 struct Node {
     std::string name;

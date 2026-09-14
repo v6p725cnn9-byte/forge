@@ -116,6 +116,18 @@ status = "todo"
 title = "Windows preset (DX12) — later, needs shadercross"
 
 [[tasks]]
+id = "g1-astronaut-walk-alignment"
+milestone = "G1"
+status = "done"
+title = "Align imported astronaut walk, remove hip root motion and attach player label"
+
+[[tasks]]
+id = "m0-windows-local-launch"
+milestone = "M0"
+status = "done"
+title = "Local Windows MSVC/SDL3 build, portable shader paths, Winsock length type and DX12 smoke"
+
+[[tasks]]
 id = "m1-shader-load"
 milestone = "M1"
 status = "done"
@@ -442,6 +454,7 @@ shaders/             HLSL + cooked MSL/SPIR-V/DXIL
 - [x] `m0-triangle` — MSL-треугольник, present, fps в тайтле
 - [x] `m0-verify` — Debug-сборка запускается на этом Маке
 - [ ] `m0-windows` — Windows-пресет (DX12), позже
+- [x] `m0-windows-local-launch` — локальная сборка MSVC/SDL3 и запуск DX12 (60 кадров с resize)
 
 ### M1 RHI + camera
 
@@ -511,3 +524,5 @@ Smoke использует временный файл настроек и не 
 Сетевой транспорт пока экспериментальный: без аутентификации, шифрования и гарантированной
 доставки одноразовых действий. Проверки на одном Mac не заменяют испытание между двумя
 машинами в LAN. Аудиоползунки сохраняются, подключение аудиодвижка ещё впереди.
+
+- [x] `g1-astronaut-walk-alignment` — направление космонавта, ходьба на месте и привязка ника

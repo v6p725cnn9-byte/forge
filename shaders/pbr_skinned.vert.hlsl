@@ -6,7 +6,7 @@ cbuffer Camera : register(b0, space1)
 
 cbuffer Joints : register(b1, space1)
 {
-    column_major float4x4 joints[48];
+    column_major float4x4 joints[64];
 };
 
 struct Input
