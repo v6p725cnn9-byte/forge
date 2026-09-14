@@ -1,6 +1,6 @@
 #include "engine/game/session/session.hpp"
 #include "engine/game_net/interest/interest.hpp"
-#include "engine/script/bindings/registry.hpp"
+#include "engine/game/actors/actors.hpp"
 
 #include <cmath>
 #include <cstdlib>
@@ -18,7 +18,7 @@ void check(bool condition, const char* message)
 
 int main()
 {
-    forge::script::Registry world;
+    forge::game::Actors world;
     forge::game::Sim sim;
     sim.reset();
     const int id = world.spawn_player(sim.spawn_point(0));

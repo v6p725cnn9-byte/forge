@@ -1,7 +1,7 @@
 #pragma once
 
-#include "engine/platform/window/host.hpp"
 #include "engine/render/passes/ui/backdrop.hpp"
+#include "engine/rhi/command/command.hpp"
 #include "engine/ui/text/font.hpp"
 
 #include <SDL3/SDL.h>
@@ -115,8 +115,8 @@ inline TextFx resolve_text_fx(const TextStyle& style, float scale, float sdf_tex
 
 class Ui {
 public:
-    bool create(rhi::Host& host);
-    void destroy(rhi::Host& host);
+    bool create(SDL_GPUDevice* device, SDL_Window* window);
+    void destroy(SDL_GPUDevice* device);
     void begin(int width, int height, float mouse_x, float mouse_y, bool mouse_down, bool pressed = false, bool released = false);
     void feed_text(std::string_view utf8);
     void key_backspace();
@@ -143,10 +143,10 @@ public:
     void clip_end();
     bool scrollbox(std::uint32_t id, Rect rect, float content_h, float* scroll);
 
-    bool submit(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, bool clear, SDL_FColor clear_color,
+    bool submit(SDL_GPUDevice* device, rhi::Command& command, SDL_GPUTexture* swapchain, bool clear, SDL_FColor clear_color,
                 std::uint32_t target_w, std::uint32_t target_h);
     bool wants_backdrop() const { return needs_backdrop_; }
-    bool prepare_backdrop(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, std::uint32_t target_w,
+    bool prepare_backdrop(SDL_GPUDevice* device, rhi::Command& command, SDL_GPUTexture* swapchain, std::uint32_t target_w,
                           std::uint32_t target_h);
 
     int width() const { return width_; }

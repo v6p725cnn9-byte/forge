@@ -4,6 +4,7 @@
 #include "engine/game_net/client/client.hpp"
 #include "engine/game_net/server/server.hpp"
 #include "engine/render/passes/opaque/pbr_scene.hpp"
+#include "engine/game/world/world.hpp"
 #include "engine/script/vm/vm.hpp"
 
 #include <string>
@@ -30,7 +31,7 @@ private:
     void follow_camera(Camera& camera) const;
     const net::Ghost* self() const;
 
-    script::Registry world_;
+    game::World world_;
     script::Vm vm_;
     net::Server server_;
     net::Client client_;

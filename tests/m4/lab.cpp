@@ -14,7 +14,7 @@ bool StreamCityLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& re
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pipeline_ = render::make_pbr_instanced_pipeline(host, renderer, false);
+    pipeline_ = render::make_pbr_instanced_pipeline(host.device(), renderer, false);
     if (!pipeline_) return false;
 
     const auto count = world::populate_city(store_);
@@ -79,7 +79,7 @@ bool StreamCityLab::upload_instances(rhi::Host& host, rhi::Command& command)
 rhi::FrameResult StreamCityLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     const glm::mat4 view_projection = camera.projection(aspect) * camera.view();
     const auto frustum = world::frustum_from_clip(view_projection);

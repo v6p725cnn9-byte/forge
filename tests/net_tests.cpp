@@ -4,7 +4,7 @@
 #include "engine/game_net/snapshots/packets.hpp"
 #include "engine/game_net/server/server.hpp"
 #include "engine/net/transport/stream.hpp"
-#include "engine/script/bindings/registry.hpp"
+#include "engine/game/actors/actors.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -134,7 +134,7 @@ int main()
         check(!unpack_snapshot(packed.data(), n, decoded), "truncated snapshot rejected");
     Snapshot crowded;
     label.text = std::string(48, 'x');
-    crowded.entities.assign(kMaxSnapshotEntities, label);
+    crowded.entities.assign(kDefaultSnapshotEntities, label);
     const auto budgeted = pack_snapshot(crowded);
     check(budgeted.size() <= kMaxPacket && unpack_snapshot(budgeted.data(), budgeted.size(), decoded),
           "dense labels produce a valid bounded snapshot");
@@ -198,7 +198,7 @@ int main()
     deliver(authority, pack_snapshot(original));
     check(guarded.tick() == 42, "wrong player snapshot ignored");
 
-    forge::script::Registry world;
+    forge::game::Actors world;
     world.spawn_player({0, 1, 0});
     world.spawn_vehicle({10, 1, 0}, 0);
     world.spawn_vehicle({80, 1, 0}, 0);

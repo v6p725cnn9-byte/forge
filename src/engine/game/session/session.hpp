@@ -11,6 +11,9 @@
 
 namespace forge::game {
 
+// Sim is the gameplay-systems implementation. game::World owns the Sim
+// instance. Session does not own World.
+
 // ALS-Refactored gaits from FAlsMovementGaitSettings / MS_Als_Normal (cm -> m).
 enum class Gait : std::uint8_t { Walk, Run, Sprint };
 

@@ -9,15 +9,15 @@
 
 namespace forge::render {
 
-SDL_GPUGraphicsPipeline* make_pbr_pipeline(rhi::Host& host, const Renderer& renderer, bool double_sided)
+SDL_GPUGraphicsPipeline* make_pbr_pipeline(SDL_GPUDevice* device, const Renderer& renderer, bool double_sided)
 {
-    auto* vs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* vs = rhi::load_shader(device, rhi::shader_directory(),
                                 {pbr_vertex_shader(ShaderFeature::None), SDL_GPU_SHADERSTAGE_VERTEX, 1});
-    auto* fs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* fs = rhi::load_shader(device, rhi::shader_directory(),
                                 {"pbr.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 9});
     if (!vs || !fs) {
-        if (vs) SDL_ReleaseGPUShader(host.device(), vs);
-        if (fs) SDL_ReleaseGPUShader(host.device(), fs);
+        if (vs) SDL_ReleaseGPUShader(device, vs);
+        if (fs) SDL_ReleaseGPUShader(device, fs);
         return nullptr;
     }
     SDL_GPUVertexBufferDescription vertex_buffer{};
@@ -51,21 +51,21 @@ SDL_GPUGraphicsPipeline* make_pbr_pipeline(rhi::Host& host, const Renderer& rend
     info.target_info.color_target_descriptions = &color;
     info.target_info.has_depth_stencil_target = true;
     info.target_info.depth_stencil_format = renderer.depth_format();
-    auto* pipeline = SDL_CreateGPUGraphicsPipeline(host.device(), &info);
-    SDL_ReleaseGPUShader(host.device(), vs);
-    SDL_ReleaseGPUShader(host.device(), fs);
+    auto* pipeline = SDL_CreateGPUGraphicsPipeline(device, &info);
+    SDL_ReleaseGPUShader(device, vs);
+    SDL_ReleaseGPUShader(device, fs);
     return pipeline;
 }
 
-SDL_GPUGraphicsPipeline* make_pbr_instanced_pipeline(rhi::Host& host, const Renderer& renderer, bool double_sided)
+SDL_GPUGraphicsPipeline* make_pbr_instanced_pipeline(SDL_GPUDevice* device, const Renderer& renderer, bool double_sided)
 {
-    auto* vs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* vs = rhi::load_shader(device, rhi::shader_directory(),
                                 {pbr_vertex_shader(ShaderFeature::Instanced), SDL_GPU_SHADERSTAGE_VERTEX, 1});
-    auto* fs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* fs = rhi::load_shader(device, rhi::shader_directory(),
                                 {"pbr.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 9});
     if (!vs || !fs) {
-        if (vs) SDL_ReleaseGPUShader(host.device(), vs);
-        if (fs) SDL_ReleaseGPUShader(host.device(), fs);
+        if (vs) SDL_ReleaseGPUShader(device, vs);
+        if (fs) SDL_ReleaseGPUShader(device, fs);
         return nullptr;
     }
     SDL_GPUVertexBufferDescription buffers[2]{};
@@ -108,21 +108,21 @@ SDL_GPUGraphicsPipeline* make_pbr_instanced_pipeline(rhi::Host& host, const Rend
     info.target_info.color_target_descriptions = &color;
     info.target_info.has_depth_stencil_target = true;
     info.target_info.depth_stencil_format = renderer.depth_format();
-    auto* pipeline = SDL_CreateGPUGraphicsPipeline(host.device(), &info);
-    SDL_ReleaseGPUShader(host.device(), vs);
-    SDL_ReleaseGPUShader(host.device(), fs);
+    auto* pipeline = SDL_CreateGPUGraphicsPipeline(device, &info);
+    SDL_ReleaseGPUShader(device, vs);
+    SDL_ReleaseGPUShader(device, fs);
     return pipeline;
 }
 
-SDL_GPUGraphicsPipeline* make_pbr_skinned_pipeline(rhi::Host& host, const Renderer& renderer, bool double_sided)
+SDL_GPUGraphicsPipeline* make_pbr_skinned_pipeline(SDL_GPUDevice* device, const Renderer& renderer, bool double_sided)
 {
-    auto* vs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* vs = rhi::load_shader(device, rhi::shader_directory(),
                                 {pbr_vertex_shader(ShaderFeature::Skinned), SDL_GPU_SHADERSTAGE_VERTEX, 2});
-    auto* fs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* fs = rhi::load_shader(device, rhi::shader_directory(),
                                 {"pbr.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 9});
     if (!vs || !fs) {
-        if (vs) SDL_ReleaseGPUShader(host.device(), vs);
-        if (fs) SDL_ReleaseGPUShader(host.device(), fs);
+        if (vs) SDL_ReleaseGPUShader(device, vs);
+        if (fs) SDL_ReleaseGPUShader(device, fs);
         return nullptr;
     }
     SDL_GPUVertexBufferDescription vertex_buffer{};
@@ -158,21 +158,21 @@ SDL_GPUGraphicsPipeline* make_pbr_skinned_pipeline(rhi::Host& host, const Render
     info.target_info.color_target_descriptions = &color;
     info.target_info.has_depth_stencil_target = true;
     info.target_info.depth_stencil_format = renderer.depth_format();
-    auto* pipeline = SDL_CreateGPUGraphicsPipeline(host.device(), &info);
-    SDL_ReleaseGPUShader(host.device(), vs);
-    SDL_ReleaseGPUShader(host.device(), fs);
+    auto* pipeline = SDL_CreateGPUGraphicsPipeline(device, &info);
+    SDL_ReleaseGPUShader(device, vs);
+    SDL_ReleaseGPUShader(device, fs);
     return pipeline;
 }
 
-SDL_GPUGraphicsPipeline* make_shadow_pipeline(rhi::Host& host, const Renderer& renderer)
+SDL_GPUGraphicsPipeline* make_shadow_pipeline(SDL_GPUDevice* device, const Renderer& renderer)
 {
-    auto* vs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* vs = rhi::load_shader(device, rhi::shader_directory(),
                                 {"shadow.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1});
-    auto* fs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* fs = rhi::load_shader(device, rhi::shader_directory(),
                                 {"shadow.frag", SDL_GPU_SHADERSTAGE_FRAGMENT});
     if (!vs || !fs) {
-        if (vs) SDL_ReleaseGPUShader(host.device(), vs);
-        if (fs) SDL_ReleaseGPUShader(host.device(), fs);
+        if (vs) SDL_ReleaseGPUShader(device, vs);
+        if (fs) SDL_ReleaseGPUShader(device, fs);
         return nullptr;
     }
     SDL_GPUVertexBufferDescription vertex_buffer{};
@@ -197,9 +197,9 @@ SDL_GPUGraphicsPipeline* make_shadow_pipeline(rhi::Host& host, const Renderer& r
     info.depth_stencil_state.enable_depth_write = true;
     info.target_info.has_depth_stencil_target = true;
     info.target_info.depth_stencil_format = renderer.depth_format();
-    auto* pipeline = SDL_CreateGPUGraphicsPipeline(host.device(), &info);
-    SDL_ReleaseGPUShader(host.device(), vs);
-    SDL_ReleaseGPUShader(host.device(), fs);
+    auto* pipeline = SDL_CreateGPUGraphicsPipeline(device, &info);
+    SDL_ReleaseGPUShader(device, vs);
+    SDL_ReleaseGPUShader(device, fs);
     return pipeline;
 }
 

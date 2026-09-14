@@ -1,4 +1,4 @@
-#include "engine/world/entities/city.hpp"
+#include "engine/world/scenery/city.hpp"
 
 #include <array>
 #include <cstdint>

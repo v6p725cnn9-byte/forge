@@ -1,7 +1,7 @@
 #pragma once
 
-#include "engine/world/entities/city.hpp"
-#include "engine/world/entities/store.hpp"
+#include "engine/world/scenery/city.hpp"
+#include "engine/world/scenery/store.hpp"
 #include "engine/world/sectors/sectors.hpp"
 #include "engine/world/spatial/cull.hpp"
 #include "engine/world/spatial/frustum.hpp"

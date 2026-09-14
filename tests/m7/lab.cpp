@@ -36,7 +36,7 @@ bool NetLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer,
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pbr_ = render::make_pbr_pipeline(host, renderer, false);
+    pbr_ = render::make_pbr_pipeline(host.device(), renderer, false);
     if (!pbr_) return false;
     if (!vm_.open(world_, &camera)) {
         SDL_Log("Lua VM failed: %s", vm_.last_error().c_str());
@@ -105,10 +105,10 @@ void NetLab::sync_debug()
     debug_.net_streamed = static_cast<std::uint32_t>(client_.snapshot().entities.size());
     debug_.net_peers = server_.peers();
     debug_.net_ping_ms = client_.ping_ms();
-    debug_.script_players = world_.alive_players();
-    debug_.script_vehicles = world_.alive_vehicles();
-    debug_.script_markers = world_.alive_markers();
-    debug_.script_labels = world_.alive_labels();
+    debug_.script_players = world_.actors.alive_players();
+    debug_.script_vehicles = world_.actors.alive_vehicles();
+    debug_.script_markers = world_.actors.alive_markers();
+    debug_.script_labels = world_.actors.alive_labels();
     debug_.gamemode = gamemode_name_.c_str();
     debug_.net_role = "listen";
     debug_.world_label_count = 0;
@@ -165,7 +165,7 @@ void NetLab::update(float dt, Camera& camera, const app::LabInput& input)
 rhi::FrameResult NetLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command,
                               SDL_GPUTexture* swapchain, Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     render::CameraUniforms camera_ubo{};
     camera_ubo.view_projection = camera.projection(aspect) * camera.view();

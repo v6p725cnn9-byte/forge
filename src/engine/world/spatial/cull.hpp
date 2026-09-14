@@ -1,7 +1,7 @@
 #pragma once
 
 #include "engine/world/spatial/frustum.hpp"
-#include "engine/world/entities/store.hpp"
+#include "engine/world/scenery/store.hpp"
 
 #include <vector>
 

@@ -1,13 +1,23 @@
 #pragma once
 
-#include "engine/world/entities/store.hpp"
+#include "engine/world/scenery/store.hpp"
 
 #include <unordered_map>
 #include <vector>
 
 namespace forge::world {
 
-enum class Residency { Empty, Prefetch, Loading, Resident, Unloading };
+// Async loader will fill Loading → CpuReady → GpuUploading. The sync path
+// currently jumps Prefetch or Resident; do not collapse these states.
+enum class Residency {
+    Empty,
+    Prefetch,
+    Loading,
+    CpuReady,
+    GpuUploading,
+    Resident,
+    Unloading,
+};
 
 class SectorIndex {
 public:

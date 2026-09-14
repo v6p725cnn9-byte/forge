@@ -103,7 +103,7 @@ int named_joint(const assets::Scene& scene, const assets::Skin& skin, std::initi
 
 } // namespace
 
-bool SurvivalVisuals::create(rhi::Host& host, Renderer& renderer)
+bool SurvivalVisuals::create(SDL_GPUDevice* device, Renderer& renderer)
 {
     std::string error;
     const auto models = assets_directory() / "models";
@@ -140,7 +140,7 @@ bool SurvivalVisuals::create(rhi::Host& host, Renderer& renderer)
             posed_max = glm::max(posed_max, position);
         }
     }
-    if (!character_.ingest(host.device(), std::move(source), "ALS mannequin", error)) {
+    if (!character_.ingest(device, std::move(source), "ALS mannequin", error)) {
         SDL_Log("ALS mannequin upload failed: %s", error.c_str());
         return false;
     }
@@ -168,15 +168,15 @@ bool SurvivalVisuals::create(rhi::Host& host, Renderer& renderer)
 
     const std::array<const char*, 3> trees{"tree_default.glb", "tree_pineTallA.glb", "tree_pineRoundC.glb"};
     for (std::size_t i = 0; i < trees.size(); ++i) {
-        if (!load_prop(trees_[i], host.device(), models / "Nature" / trees[i], error, character_.lighting())) {
+        if (!load_prop(trees_[i], device, models / "Nature" / trees[i], error, character_.lighting())) {
             SDL_Log("Tree load failed: %s", error.c_str());
             return false;
         }
         tree_transforms_[i] = grounded(trees_[i], i == 1 ? 6.2f : 4.8f);
     }
-    if (!load_prop(rock_, host.device(), models / "Nature/rock_largeA.glb", error, character_.lighting())
-        || !load_prop(campfire_, host.device(), models / "Campfire/campfire-pit.glb", error, character_.lighting())
-        || !flame_.ingest(host.device(), fire_billboard(), "Kenney fire particle", error, character_.lighting())) {
+    if (!load_prop(rock_, device, models / "Nature/rock_largeA.glb", error, character_.lighting())
+        || !load_prop(campfire_, device, models / "Campfire/campfire-pit.glb", error, character_.lighting())
+        || !flame_.ingest(device, fire_billboard(), "Kenney fire particle", error, character_.lighting())) {
         SDL_Log("Survival prop load failed: %s", error.c_str());
         return false;
     }
@@ -184,7 +184,7 @@ bool SurvivalVisuals::create(rhi::Host& host, Renderer& renderer)
         "resource-wood", "resource-stone", "resource-stone-large", "grass", "workbench", "barrel-open"}};
     const std::array<float,10> heights{{.75f,.85f,.75f,.85f,.22f,.20f,1.15f,.45f,1.0f,1.15f}};
     for (std::size_t i = 0; i < supplies.size(); ++i) {
-        if (!load_prop(supplies_[i],host.device(),models / "SurvivalKit" / (std::string(supplies[i])+".glb"),error,character_.lighting())) {
+        if (!load_prop(supplies_[i],device,models / "SurvivalKit" / (std::string(supplies[i])+".glb"),error,character_.lighting())) {
             SDL_Log("Supply model failed: %s",error.c_str());
             return false;
         }
@@ -192,9 +192,9 @@ bool SurvivalVisuals::create(rhi::Host& host, Renderer& renderer)
     }
     rock_transform_ = grounded(rock_, 0.75f);
     fire_transform_ = grounded(campfire_, 0.42f);
-    pbr_ = make_pbr_pipeline(host, renderer, false);
-    double_sided_ = make_pbr_pipeline(host, renderer, true);
-    skinned_ = make_pbr_skinned_pipeline(host, renderer, true);
+    pbr_ = make_pbr_pipeline(device, renderer, false);
+    double_sided_ = make_pbr_pipeline(device, renderer, true);
+    skinned_ = make_pbr_skinned_pipeline(device, renderer, true);
     if (!pbr_ || !double_sided_ || !skinned_) return false;
     SDL_Log("Survival assets ready: ALS mannequin (%zu skins, %zu clips), trees, campfire and rock",
             character.skins.size(), character.animations.size());
@@ -407,17 +407,17 @@ void SurvivalVisuals::draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pas
     }
 }
 
-void SurvivalVisuals::destroy(rhi::Host& host)
+void SurvivalVisuals::destroy(SDL_GPUDevice* device)
 {
-    character_.destroy(host.device());
-    for (auto& tree : trees_) tree.destroy(host.device());
-    rock_.destroy(host.device());
-    campfire_.destroy(host.device());
-    flame_.destroy(host.device());
-    for (auto& supply : supplies_) supply.destroy(host.device());
-    if (pbr_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pbr_);
-    if (double_sided_) SDL_ReleaseGPUGraphicsPipeline(host.device(), double_sided_);
-    if (skinned_) SDL_ReleaseGPUGraphicsPipeline(host.device(), skinned_);
+    character_.destroy(device);
+    for (auto& tree : trees_) tree.destroy(device);
+    rock_.destroy(device);
+    campfire_.destroy(device);
+    flame_.destroy(device);
+    for (auto& supply : supplies_) supply.destroy(device);
+    if (pbr_) SDL_ReleaseGPUGraphicsPipeline(device, pbr_);
+    if (double_sided_) SDL_ReleaseGPUGraphicsPipeline(device, double_sided_);
+    if (skinned_) SDL_ReleaseGPUGraphicsPipeline(device, skinned_);
     pbr_ = double_sided_ = skinned_ = nullptr;
     for (auto& player : players_) player.active = false;
 }

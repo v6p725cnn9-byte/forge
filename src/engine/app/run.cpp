@@ -43,7 +43,7 @@ int run_lab(Lab& lab, const char* window_title)
     render::Renderer renderer;
     Camera camera;
     if (!host.open(window_title, 1280, 720, lab.shaders())) return 1;
-    if (!renderer.prepare(host)) return 1;
+    if (!renderer.prepare(host.gpu(), host.window())) return 1;
     ScopeExit cleanup([&] { lab.teardown(host, renderer); });
     if (!lab.setup(host, renderer, camera)) return 1;
 

@@ -18,9 +18,9 @@ class Server {
 public:
     bool listen(std::uint16_t port = 27015, bool lan = false);
     void close();
-    void attach(game::Actors& world);
+    void attach(game::World& world); // production: one aggregate root
+    void attach(game::Actors& actors); // M7 lab without Sim
     void attach_sim(game::Sim& sim);
-    void attach(game::World& world);
     void set_stream_radius(float meters);
     float stream_radius() const { return stream_radius_; }
     void update(float dt);

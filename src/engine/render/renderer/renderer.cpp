@@ -22,12 +22,13 @@ bool fail(const char* operation)
 
 } // namespace
 
-bool Renderer::prepare(rhi::Host& host)
+bool Renderer::prepare(rhi::Device& device, SDL_Window*)
 {
     destroy();
-    device_ = host.device();
+    device_ = device.native();
     if (!device_) return false;
-    resources_.bind(device_);
+    pool_.bind(device_);
+    graph_.bind(pool_);
     depth_format_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
     if (!SDL_GPUTextureSupportsFormat(device_, depth_format_, SDL_GPU_TEXTURETYPE_2D,
                                       SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER)) {
@@ -48,7 +49,7 @@ bool Renderer::prepare(rhi::Host& host)
     return true;
 }
 
-bool Renderer::create_post_pipelines(rhi::Host& host)
+bool Renderer::create_post_pipelines(SDL_Window* window)
 {
     if (tonemap_) return true;
     const auto directory = rhi::shader_directory();
@@ -62,7 +63,7 @@ bool Renderer::create_post_pipelines(rhi::Host& host)
         return fail("post-process shaders");
     }
     SDL_GPUColorTargetDescription swap{};
-    swap.format = SDL_GetGPUSwapchainTextureFormat(device_, host.window());
+    swap.format = SDL_GetGPUSwapchainTextureFormat(device_, window);
     SDL_GPUGraphicsPipelineCreateInfo tone{};
     tone.vertex_shader = tone_vs;
     tone.fragment_shader = tone_fs;
@@ -89,31 +90,29 @@ bool Renderer::create_post_pipelines(rhi::Host& host)
     return (tonemap_ && bloom_pipeline_) || fail("SDL_CreateGPUGraphicsPipeline (post)");
 }
 
-bool Renderer::ensure(rhi::Host& host, std::uint32_t width, std::uint32_t height, FrameConfig config)
+bool Renderer::ensure(rhi::Device& device, SDL_Window* window, std::uint32_t width, std::uint32_t height,
+                      FrameConfig config)
 {
-    if (!device_ && !prepare(host)) return false;
+    if (!device_ && !prepare(device, window)) return false;
     config_ = config;
-    if (config.hdr && !create_post_pipelines(host)) return false;
+    if (config.hdr && !create_post_pipelines(window)) return false;
     if (width_ == width && height_ == height && depth() && (!config.hdr || hdr()) && (!config.bloom || bloom())) {
         return true;
     }
 
-    resources_.destroy(hdr_);
-    resources_.destroy(depth_);
-    resources_.destroy(bloom_);
-    hdr_ = depth_ = bloom_ = {};
-
-    const auto color_usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    const auto depth_usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    depth_ = resources_.create_texture({depth_format_, depth_usage, width, height});
-    if (!depth()) return fail("SDL_CreateGPUTexture (depth)");
+    graph_.clear();
+    hdr_g_ = depth_g_ = bloom_g_ = {};
+    const auto color = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    const auto depth = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    depth_g_ = graph_.create_transient({"depth", width, height, depth_format_, depth, true});
+    if (!this->depth()) return fail("SDL_CreateGPUTexture (depth)");
     if (config.hdr) {
-        hdr_ = resources_.create_texture({hdr_format_, color_usage, width, height});
+        hdr_g_ = graph_.create_transient({"hdr", width, height, hdr_format_, color, true});
         if (!hdr()) return fail("SDL_CreateGPUTexture (hdr)");
     }
     if (config.bloom) {
-        bloom_ = resources_.create_texture(
-            {hdr_format_, color_usage, std::max(1u, width / 2), std::max(1u, height / 2)});
+        bloom_g_ = graph_.create_transient(
+            {"bloom", std::max(1u, width / 2), std::max(1u, height / 2), hdr_format_, color, true});
         if (!bloom()) return fail("SDL_CreateGPUTexture (bloom)");
     }
     width_ = width;
@@ -194,8 +193,9 @@ bool Renderer::post(rhi::Command& command, SDL_GPUTexture* swapchain, float expo
 void Renderer::destroy()
 {
     if (device_) SDL_WaitForGPUIdle(device_);
-    resources_.destroy_all();
-    hdr_ = depth_ = bloom_ = {};
+    graph_.clear();
+    hdr_g_ = depth_g_ = bloom_g_ = {};
+    pool_.destroy_all();
     if (device_ && linear_clamp_) SDL_ReleaseGPUSampler(device_, linear_clamp_);
     if (device_ && tonemap_) SDL_ReleaseGPUGraphicsPipeline(device_, tonemap_);
     if (device_ && bloom_pipeline_) SDL_ReleaseGPUGraphicsPipeline(device_, bloom_pipeline_);

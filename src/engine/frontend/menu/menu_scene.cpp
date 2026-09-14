@@ -22,25 +22,25 @@ constexpr float kSunElevation = 9.0f;
 
 } // namespace
 
-bool MenuScene::create(rhi::Host& host, render::Renderer& renderer)
+bool MenuScene::create(SDL_GPUDevice* device, render::Renderer& renderer)
 {
-    destroy(host);
-    if (!host.device()) return false;
+    destroy(device);
+    if (!device) return false;
     std::string error;
     const glm::vec3 sun = render::sun_direction(kSunAzimuth, kSunElevation);
-    if (!vista_.ingest(host.device(), assets::make_vista_terrain(sun), "menu_vista", error)) {
+    if (!vista_.ingest(device, assets::make_vista_terrain(sun), "menu_vista", error)) {
         SDL_Log("Menu vista failed: %s", error.c_str());
         return false;
     }
     const auto helmet_path = forge::assets_directory() / "models/FlightHelmet/FlightHelmet.gltf";
-    if (!helmet_.load(host.device(), helmet_path, error)) {
+    if (!helmet_.load(device, helmet_path, error)) {
         SDL_Log("Menu scene load failed: %s", error.c_str());
         return false;
     }
-    pbr_cull_ = render::make_pbr_pipeline(host, renderer, false);
-    pbr_double_ = render::make_pbr_pipeline(host, renderer, true);
+    pbr_cull_ = render::make_pbr_pipeline(device, renderer, false);
+    pbr_double_ = render::make_pbr_pipeline(device, renderer, true);
     if (!pbr_cull_ || !pbr_double_) {
-        destroy(host);
+        destroy(device);
         return false;
     }
     // Sit the helmet prop on the camp knoll (knoll top is y=1.5).
@@ -59,22 +59,22 @@ bool MenuScene::create(rhi::Host& host, render::Renderer& renderer)
     return true;
 }
 
-void MenuScene::destroy(rhi::Host& host)
+void MenuScene::destroy(SDL_GPUDevice* device)
 {
-    if (host.device()) {
-        vista_.destroy(host.device());
-        helmet_.destroy(host.device());
-        if (pbr_cull_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pbr_cull_);
-        if (pbr_double_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pbr_double_);
+    if (device) {
+        vista_.destroy(device);
+        helmet_.destroy(device);
+        if (pbr_cull_) SDL_ReleaseGPUGraphicsPipeline(device, pbr_cull_);
+        if (pbr_double_) SDL_ReleaseGPUGraphicsPipeline(device, pbr_double_);
     }
     pbr_cull_ = pbr_double_ = nullptr;
 }
 
-bool MenuScene::draw(rhi::Host& host, render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
-                     Uint32 width, Uint32 height, float now_seconds)
+bool MenuScene::draw(rhi::Device& gpu, SDL_Window* window, render::Renderer& renderer, rhi::Command& command,
+                     SDL_GPUTexture* swapchain, Uint32 width, Uint32 height, float now_seconds)
 {
     if (!ready() || !swapchain || width == 0 || height == 0) return false;
-    if (!renderer.ensure(host, width, height, {.hdr = true, .bloom = false})) return false;
+    if (!renderer.ensure(gpu, window, width, height, {.hdr = true, .bloom = false})) return false;
     const float angle = now_seconds * kOrbitSpeed;
     camera_.position = kCamp + glm::vec3(std::cos(angle) * kOrbitRadius, kOrbitHeight - kCamp.y,
                                          std::sin(angle) * kOrbitRadius);

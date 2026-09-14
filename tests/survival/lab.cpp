@@ -46,9 +46,9 @@ bool SurvivalLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& rend
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pbr_ = render::make_pbr_pipeline(host, renderer, false);
+    pbr_ = render::make_pbr_pipeline(host.device(), renderer, false);
     if (!pbr_) return false;
-    if (!visuals_.create(host, renderer)) return false;
+    if (!visuals_.create(host.device(), renderer)) return false;
 
     unsigned port = env_port();
     net::Address connect{};
@@ -74,7 +74,7 @@ bool SurvivalLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& rend
     }
 
     if (hosting_) {
-        sim_.reset();
+        world_.sim.reset();
         if (!server_.listen(static_cast<std::uint16_t>(port), lan)) {
             if (!server_.listen(0, lan)) {
                 SDL_Log("UDP bind failed");
@@ -82,7 +82,6 @@ bool SurvivalLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& rend
             }
         }
         server_.attach(world_);
-        server_.attach_sim(sim_);
         server_.set_stream_radius(70.0f);
         connect = net::localhost(server_.port());
         if (lan) {
@@ -246,7 +245,7 @@ void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
 rhi::FrameResult SurvivalLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
                                    Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     render::CameraUniforms camera_ubo{};
     camera_ubo.view_projection = camera.projection(aspect) * camera.view();
@@ -294,7 +293,7 @@ void SurvivalLab::teardown(rhi::Host& host, [[maybe_unused]] render::Renderer& r
 {
     client_.close();
     if (hosting_) server_.close();
-    visuals_.destroy(host);
+    visuals_.destroy(host.device());
     cube_.destroy(host.device());
     if (pbr_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pbr_);
     pbr_ = nullptr;

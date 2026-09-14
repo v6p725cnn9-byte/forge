@@ -3,6 +3,7 @@
 #include "engine/app/lab.hpp"
 #include "engine/physics/world/world.hpp"
 #include "engine/render/passes/opaque/pbr_scene.hpp"
+#include "engine/game/world/world.hpp"
 #include "engine/script/vm/vm.hpp"
 
 #include <string>
@@ -28,7 +29,7 @@ private:
     void sync_debug();
     void follow_camera(Camera& camera) const;
 
-    script::Registry world_;
+    game::World world_;
     script::Vm vm_;
     render::PbrScene cube_;
     phys::World physics_;

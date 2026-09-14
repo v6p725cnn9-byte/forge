@@ -93,7 +93,7 @@ Renderer  Simulation  Network
          Core (log, jobs, profiler, time)
 ```
 
-Один authoritative state: `game::Actors` + `game::Sim`. Lua только вызывает spawn/set. Сеть читает те же структуры. `world::Store` — пространственное хранилище декора (M4), не игроки.
+Один корень: `game::World` (`world.actors`, `world.sim`). Lua только вызывает spawn/set. Сеть читает тот же World. `world/scenery` — SoA декора, не gameplay entities.
 
 CMake это отражает отдельными статическими либами: `forge_net` не знает про игру; `forge_game_net` знает.
 
@@ -151,12 +151,12 @@ src/engine/
     character/       CharacterVirtual API
     locomotion/      ALS standalone
   world/
-    entities/        SoA store, city
+    scenery/         SoA props, city kit
     transform/       types, origin
     spatial/         frustum, cull
     sectors/         residency
   game/
-    world/           Actors + Sim
+    world/           aggregate root: actors + sim
     actors/
     inventory/       items
     crafting/        recipes

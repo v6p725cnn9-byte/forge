@@ -8,13 +8,12 @@ namespace forge::assets {
 // asset; Resident means the GPU mesh may stay uploaded.
 inline bool gpu_resident(world::Residency state)
 {
-    return state == world::Residency::Resident;
+    return state == world::Residency::Resident || state == world::Residency::GpuUploading;
 }
 
 inline bool cpu_resident(world::Residency state)
 {
-    return state == world::Residency::Resident || state == world::Residency::Prefetch
-        || state == world::Residency::Loading;
+    return state != world::Residency::Empty && state != world::Residency::Unloading;
 }
 
 } // namespace forge::assets

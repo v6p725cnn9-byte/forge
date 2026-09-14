@@ -142,7 +142,7 @@ void UnlitCubesLab::update(float dt, Camera& camera, const app::LabInput& input)
 rhi::FrameResult UnlitCubesLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     const glm::mat4 vp = camera.projection(static_cast<float>(width) / static_cast<float>(height)) * camera.view();
     SDL_PushGPUVertexUniformData(command.handle, 0, glm::value_ptr(vp), sizeof(vp));
 

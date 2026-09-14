@@ -4,6 +4,8 @@
 
 namespace forge::rhi {
 
+// GPU handle is always index + generation. native() returns null if the
+// generation does not match (destroyed or reused slot).
 template <typename Tag>
 struct Handle {
     std::uint32_t index = 0;

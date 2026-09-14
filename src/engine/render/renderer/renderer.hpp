@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/platform/window/host.hpp"
+#include "engine/rhi/device/device.hpp"
 #include "engine/rhi/device/resources.hpp"
 #include "engine/render/framegraph/framegraph.hpp"
 
@@ -14,7 +14,8 @@ struct FrameConfig {
     bool bloom = false;
 };
 
-// Owns scene targets and post pipelines. rhi::Host is window + device only.
+// Scene transients are allocated by FrameGraph via rhi::Resources. Do not
+// create extra GPU targets outside the graph after prepare().
 class Renderer {
 public:
     Renderer() = default;
@@ -22,13 +23,13 @@ public:
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
-    bool prepare(rhi::Host& host);
-    bool ensure(rhi::Host& host, std::uint32_t width, std::uint32_t height, FrameConfig config);
+    bool prepare(rhi::Device& device, SDL_Window* window);
+    bool ensure(rhi::Device& device, SDL_Window* window, std::uint32_t width, std::uint32_t height, FrameConfig config);
     void destroy();
 
-    SDL_GPUTexture* hdr() const { return resources_.native(hdr_); }
-    SDL_GPUTexture* depth() const { return resources_.native(depth_); }
-    SDL_GPUTexture* bloom() const { return resources_.native(bloom_); }
+    SDL_GPUTexture* hdr() const { return graph_.native(hdr_g_); }
+    SDL_GPUTexture* depth() const { return graph_.native(depth_g_); }
+    SDL_GPUTexture* bloom() const { return graph_.native(bloom_g_); }
     SDL_GPUTextureFormat hdr_format() const { return hdr_format_; }
     SDL_GPUTextureFormat depth_format() const { return depth_format_; }
     SDL_GPUSampler* linear_clamp() const { return linear_clamp_; }
@@ -44,12 +45,13 @@ public:
     bool post(rhi::Command& command, SDL_GPUTexture* swapchain, float exposure, float bloom_strength, float bloom_threshold);
 
 private:
-    bool create_post_pipelines(rhi::Host& host);
+    bool create_post_pipelines(SDL_Window* window);
 
-    rhi::Resources resources_;
-    rhi::TextureHandle hdr_{};
-    rhi::TextureHandle depth_{};
-    rhi::TextureHandle bloom_{};
+    rhi::Resources pool_;
+    FrameGraph graph_;
+    FrameGraph::Handle hdr_g_{};
+    FrameGraph::Handle depth_g_{};
+    FrameGraph::Handle bloom_g_{};
     SDL_GPUDevice* device_ = nullptr;
     SDL_GPUSampler* linear_clamp_ = nullptr;
     SDL_GPUGraphicsPipeline* tonemap_ = nullptr;

@@ -19,8 +19,8 @@ bool PbrHelmetLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& ren
         SDL_Log("Scene load failed: %s", error.c_str());
         return false;
     }
-    pbr_cull_ = render::make_pbr_pipeline(host, renderer, false);
-    pbr_double_ = render::make_pbr_pipeline(host, renderer, true);
+    pbr_cull_ = render::make_pbr_pipeline(host.device(), renderer, false);
+    pbr_double_ = render::make_pbr_pipeline(host.device(), renderer, true);
     if (!pbr_cull_ || !pbr_double_) return false;
     debug_.model = scene_.model_name.c_str();
     debug_.materials = scene_.material_count;
@@ -40,7 +40,7 @@ void PbrHelmetLab::update(float dt, Camera& camera, const app::LabInput& input)
 rhi::FrameResult PbrHelmetLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     render::CameraUniforms camera_ubo{};
     camera_ubo.view_projection =
         camera.projection(static_cast<float>(width) / static_cast<float>(height)) * camera.view();

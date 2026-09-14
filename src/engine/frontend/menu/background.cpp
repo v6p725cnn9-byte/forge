@@ -2,7 +2,7 @@
 
 #include "engine/assets/gltf/scene.hpp"
 #include "engine/core/paths/paths.hpp"
-#include "engine/platform/window/host.hpp"
+
 
 #include <SDL3/SDL.h>
 #include <string>
@@ -30,16 +30,16 @@ CoverCrop cover_crop(Uint32 src_w, Uint32 src_h, Uint32 dst_w, Uint32 dst_h)
     return crop;
 }
 
-bool MenuBackground::create(rhi::Host& host)
+bool MenuBackground::create(SDL_GPUDevice* device)
 {
-    destroy(host);
-    if (!host.device()) return false;
+    destroy(device);
+    if (!device) return false;
     assets::ImageSource source;
     source.path = forge::assets_directory() / "menu/background.png";
     // UNORM, not sRGB: the blit copies raw texels into the swapchain, which
     // the UI pass already treats as final display values.
     std::string error;
-    background_ = rhi::load_texture(host.device(), source, false, error);
+    background_ = rhi::load_texture(device, source, false, error);
     if (!background_.handle) {
         SDL_Log("Menu background unavailable (%s): %s", source.path.string().c_str(), error.c_str());
         return false;
@@ -48,9 +48,9 @@ bool MenuBackground::create(rhi::Host& host)
     return true;
 }
 
-void MenuBackground::destroy(rhi::Host& host)
+void MenuBackground::destroy(SDL_GPUDevice* device)
 {
-    if (background_.handle) rhi::destroy_texture(host.device(), background_);
+    if (background_.handle) rhi::destroy_texture(device, background_);
     background_ = {};
 }
 

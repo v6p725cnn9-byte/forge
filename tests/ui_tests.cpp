@@ -240,9 +240,9 @@ int main()
     forge::render::Renderer renderer;
     forge::app::MenuScene scene;
     check(!scene.ready(), "scene starts not ready");
-    check(!scene.create(closed, renderer), "scene refuses a closed device");
+    check(!scene.create(closed.device(), renderer), "scene refuses a closed device");
     check(!scene.ready(), "failed scene stays not ready");
-    scene.destroy(closed);
+    scene.destroy(closed.device());
     std::cout << "Menu scene fallback checks passed\n";
 
     const auto vista = forge::assets::make_vista_terrain(forge::render::sun_direction(8.0f, 9.0f));

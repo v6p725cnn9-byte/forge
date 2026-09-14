@@ -5,9 +5,11 @@
 
 namespace forge::game {
 
-// Single authoritative gameplay state. Spatial scenery (M4 SoA store) is a
-// different domain and must not duplicate actor positions.
-struct World {
+// Aggregate root for gameplay. Everything that is "the session" hangs here:
+// actors, sim rules, and later weather/AI/quests/events/loot/machines/doors.
+// There is no second authority. world:: scenery SoA is props only.
+class World {
+public:
     Actors actors;
     Sim sim;
 };

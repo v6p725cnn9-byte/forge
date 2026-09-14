@@ -71,7 +71,7 @@ int run_game(const char* window_title)
     rhi::Host host;
     render::Renderer renderer;
     if (!host.open(window_title, settings.width, settings.height, kShaders)) return 1;
-    if (!renderer.prepare(host)) return 1;
+    if (!renderer.prepare(host.gpu(), host.window())) return 1;
     if (!host.apply_display(settings.width, settings.height, settings.fullscreen, settings.vsync)) return 1;
     ui::Ui game_ui;
     MenuBackground background;
@@ -80,16 +80,16 @@ int run_game(const char* window_title)
     std::unique_ptr<labs::SurvivalLab> session;
     ScopeExit cleanup([&] {
         if (session) session->teardown(host, renderer);
-        menu_scene.destroy(host);
-        background.destroy(host);
-        game_ui.destroy(host);
+        menu_scene.destroy(host.device());
+        background.destroy(host.device());
+        game_ui.destroy(host.device());
         composite.destroy(host.device());
     });
-    if (!game_ui.create(host)) return 1;
-    if (!background.create(host)) SDL_Log("Continuing without a menu backdrop image");
+    if (!game_ui.create(host.device(), host.window())) return 1;
+    if (!background.create(host.device())) SDL_Log("Continuing without a menu backdrop image");
     const bool menu_backdrop = background.ready();
-    if (!menu_scene.create(host, renderer)) {
-        menu_scene.destroy(host);
+    if (!menu_scene.create(host.device(), renderer)) {
+        menu_scene.destroy(host.device());
         SDL_Log("Continuing without a 3D menu scene");
     }
     const bool menu_3d = menu_scene.ready();
@@ -232,17 +232,18 @@ int run_game(const char* window_title)
             else SDL_StopTextInput(host.window());
             if (menu_3d) {
                 const float now_seconds = static_cast<float>(SDL_GetTicks()) / 1000.0f;
-                if (!menu_scene.draw(host, renderer, command, target, width, height, now_seconds)) return 1;
+                if (!menu_scene.draw(host.gpu(), host.window(), renderer, command, target, width, height, now_seconds))
+                    return 1;
             } else if (menu_backdrop) {
                 background.blit(command, target, width, height);
             } else {
                 composite.clear(command.handle, {0.04f, 0.06f, 0.05f, 1.0f});
             }
             const auto result = menu.draw(game_ui);
-            if (game_ui.wants_backdrop() && !game_ui.prepare_backdrop(host, command, target, width, height))
+            if (game_ui.wants_backdrop() && !game_ui.prepare_backdrop(host.device(), command, target, width, height))
                 return 1;
             composite.present(command.handle, swapchain, width, height);
-            if (!game_ui.submit(host, command, swapchain, false, {}, width, height)) return 1;
+            if (!game_ui.submit(host.device(), command, swapchain, false, {}, width, height)) return 1;
             if (!command.submit()) return 1;
             if (settings.width != applied.width || settings.height != applied.height
                 || settings.fullscreen != applied.fullscreen || settings.vsync != applied.vsync) {
@@ -360,10 +361,10 @@ int run_game(const char* window_title)
                 if (action.close) inventory_open = false;
                 if (action.action != game::Action::None) session->request(action.action,action.argument);
             }
-            if (game_ui.wants_backdrop() && !game_ui.prepare_backdrop(host, command, target, width, height))
+            if (game_ui.wants_backdrop() && !game_ui.prepare_backdrop(host.device(), command, target, width, height))
                 return 1;
             composite.present(command.handle, swapchain, width, height);
-            if (!game_ui.submit(host, command, swapchain, false, {}, width, height)) return 1;
+            if (!game_ui.submit(host.device(), command, swapchain, false, {}, width, height)) return 1;
             if (host.overlay().visible()) {
                 host.overlay().begin_frame();
                 host.overlay().draw_debug(camera, session->debug_state(), host.backend(), width, height,

@@ -8,7 +8,8 @@ using Player = game::Player;
 using Vehicle = game::Vehicle;
 using Marker = game::Marker;
 using Label = game::Label;
-using Registry = game::Actors;
+// Labs may still mention these type names. Lua never sees Actors — Vm binds
+// operations onto game::World.
 
 constexpr int kMaxPlayers = game::kMaxPlayers;
 constexpr int kMaxVehicles = game::kMaxVehicles;

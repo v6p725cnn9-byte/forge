@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/platform/window/host.hpp"
+#include "engine/rhi/command/command.hpp"
 #include "engine/rhi/texture/texture.hpp"
 
 #include <SDL3/SDL.h>
@@ -13,8 +13,8 @@ namespace forge::app {
 // clear color, so create() failing is non-fatal.
 class MenuBackground {
 public:
-    bool create(rhi::Host& host);
-    void destroy(rhi::Host& host);
+    bool create(SDL_GPUDevice* device);
+    void destroy(SDL_GPUDevice* device);
     bool ready() const { return background_.handle != nullptr; }
     void blit(rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width, Uint32 height);
 

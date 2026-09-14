@@ -35,7 +35,7 @@ void open_sandbox(lua_State* L)
 
 } // namespace
 
-bool Vm::open(Registry& world, Camera* camera)
+bool Vm::open(game::World& world, Camera* camera)
 {
     close();
     state_ = luaL_newstate();

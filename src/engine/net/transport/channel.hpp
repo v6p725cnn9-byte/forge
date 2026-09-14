@@ -12,10 +12,22 @@ constexpr std::uint32_t kTransportMagic = 0x31544E46u; // FNT1
 constexpr std::size_t kEnvelopeBytes = 17;
 constexpr std::uint8_t kFlagReliable = 1;
 
-// Unreliable: fire-and-forget. Duplicates dropped via Connection::accept_incoming.
-// Reliable: resend until ACK. Delivery is unordered (packet 102 may complete
-// before 101). Per-channel ordered reliable is not provided.
+// Lane is the protocol contract. Implementation today uses 0 and 1 only.
+// Ordered reliable (2) and a dedicated snapshot lane (3) are reserved —
+// do not silently promote Hello/Event onto ordered without a new Channel.
+enum class Lane : std::uint8_t {
+    Unreliable = 0,
+    ReliableUnordered = 1,
+    ReliableOrdered = 2,
+    Snapshot = 3,
+};
+
 enum class Reliability : std::uint8_t { Unreliable, Reliable };
+
+inline Lane lane_of(Reliability reliability)
+{
+    return reliability == Reliability::Reliable ? Lane::ReliableUnordered : Lane::Unreliable;
+}
 
 struct Datagram {
     std::uint32_t seq = 0;

@@ -28,7 +28,7 @@ bool LuaGamemodeLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& r
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pbr_ = render::make_pbr_pipeline(host, renderer, false);
+    pbr_ = render::make_pbr_pipeline(host.device(), renderer, false);
     if (!pbr_) return false;
     if (!physics_.init()) return false;
     physics_.add_box({0.0f, -0.5f, 0.0f}, {40.0f, 0.5f, 40.0f});
@@ -46,11 +46,11 @@ bool LuaGamemodeLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& r
         SDL_Log("Gamemode failed: %s", vm_.last_error().c_str());
         return false;
     }
-    if (world_.alive_players() == 0) world_.spawn_player({0.0f, 1.0f, 0.0f});
-    character_ = world_.player(0)->position;
+    if (world_.actors.alive_players() == 0) world_.actors.spawn_player({0.0f, 1.0f, 0.0f});
+    character_ = world_.actors.player(0)->position;
     physics_.spawn_character(character_, 0.28f, 0.45f);
-    if (world_.alive_vehicles() > 0) {
-        const auto* vehicle = world_.vehicle(0);
+    if (world_.actors.alive_vehicles() > 0) {
+        const auto* vehicle = world_.actors.vehicle(0);
         has_car_ = physics_.spawn_vehicle(vehicle->position + glm::vec3{0.0f, 1.0f, 0.0f}, vehicle->yaw);
     }
 
@@ -69,18 +69,18 @@ bool LuaGamemodeLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& r
     debug_.home_pitch = camera.pitch;
     sync_debug();
     SDL_Log("M6 gamemode %s: %u players, %u vehicles, %u markers, %u labels", gamemode_name_.c_str(),
-            world_.alive_players(), world_.alive_vehicles(), world_.alive_markers(), world_.alive_labels());
+            world_.actors.alive_players(), world_.actors.alive_vehicles(), world_.actors.alive_markers(), world_.actors.alive_labels());
     return true;
 }
 
 void LuaGamemodeLab::sync_debug()
 {
-    debug_.script_players = world_.alive_players();
-    debug_.script_vehicles = world_.alive_vehicles();
-    debug_.script_markers = world_.alive_markers();
-    debug_.script_labels = world_.alive_labels();
+    debug_.script_players = world_.actors.alive_players();
+    debug_.script_vehicles = world_.actors.alive_vehicles();
+    debug_.script_markers = world_.actors.alive_markers();
+    debug_.script_labels = world_.actors.alive_labels();
     debug_.world_label_count = 0;
-    for (const auto& label : world_.labels()) {
+    for (const auto& label : world_.actors.labels()) {
         if (!label.alive || debug_.world_label_count >= render::DebugState::kMaxWorldLabels) continue;
         const auto i = debug_.world_label_count++;
         debug_.world_label_pos[i] = label.position;
@@ -114,7 +114,7 @@ void LuaGamemodeLab::update(float dt, Camera& camera, const app::LabInput& input
 {
     if (input.toggle_person)
         camera.person = camera.is_first_person() ? CameraPerson::Third : CameraPerson::First;
-    if (input.toggle_walk && has_car_ && world_.vehicle(0)) {
+    if (input.toggle_walk && has_car_ && world_.actors.vehicle(0)) {
         const float distance = glm::length(physics_.vehicle_position() - character_);
         if (driving_) {
             driving_ = false;
@@ -149,12 +149,12 @@ void LuaGamemodeLab::update(float dt, Camera& camera, const app::LabInput& input
         accumulator_ -= step;
     }
     character_ = physics_.character_position();
-    if (auto* player = world_.player(0)) {
+    if (auto* player = world_.actors.player(0)) {
         player->position = driving_ && has_car_ ? physics_.vehicle_position() : character_;
         player->yaw = driving_ && has_car_ ? physics_.vehicle_yaw() : character_yaw_;
     }
     if (has_car_) {
-        if (auto* vehicle = world_.vehicle(0)) {
+        if (auto* vehicle = world_.actors.vehicle(0)) {
             vehicle->position = physics_.vehicle_position();
             vehicle->yaw = physics_.vehicle_yaw();
         }
@@ -168,7 +168,7 @@ void LuaGamemodeLab::update(float dt, Camera& camera, const app::LabInput& input
 rhi::FrameResult LuaGamemodeLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     render::CameraUniforms camera_ubo{};
     camera_ubo.view_projection = camera.projection(aspect) * camera.view();
@@ -197,16 +197,16 @@ rhi::FrameResult LuaGamemodeLab::draw(rhi::Host& host, [[maybe_unused]] render::
     draw_cube(cube_at({0.0f, -0.5f, 0.0f}, {80.0f, 1.0f, 80.0f}), {0.27f, 0.35f, 0.24f, 1.0f});
     draw_cube(cube_at({10.0f, 0.5f, -6.0f}, {3.0f, 1.0f, 3.0f}), {0.42f, 0.40f, 0.38f, 1.0f});
 
-    for (int id = 0; id < static_cast<int>(world_.players().size()); ++id) {
-        const auto* player = world_.player(id);
+    for (int id = 0; id < static_cast<int>(world_.actors.players().size()); ++id) {
+        const auto* player = world_.actors.player(id);
         if (!player) continue;
         if (id == 0 && driving_) continue;
         if (id == 0 && camera.is_first_person()) continue;
         const glm::vec4 tint = id == 0 ? glm::vec4{0.95f, 0.45f, 0.18f, 1.0f} : glm::vec4{0.25f, 0.62f, 0.85f, 1.0f};
         draw_cube(cube_at(player->position + glm::vec3{0.0f, 0.15f, 0.0f}, {0.55f, 1.7f, 0.55f}, player->yaw), tint);
     }
-    for (int id = 0; id < static_cast<int>(world_.vehicles().size()); ++id) {
-        const auto* vehicle = world_.vehicle(id);
+    for (int id = 0; id < static_cast<int>(world_.actors.vehicles().size()); ++id) {
+        const auto* vehicle = world_.actors.vehicle(id);
         if (!vehicle) continue;
         if (id == 0 && has_car_) {
             const glm::mat4 chassis = physics_.vehicle_transform() * glm::translate(glm::mat4(1.0f), {0.0f, 0.22f, 0.0f})
@@ -220,7 +220,7 @@ rhi::FrameResult LuaGamemodeLab::draw(rhi::Host& host, [[maybe_unused]] render::
         draw_cube(cube_at(vehicle->position + glm::vec3{0.0f, 0.35f, 0.0f}, {1.7f, 0.55f, 3.4f}, vehicle->yaw),
                   {0.55f, 0.18f, 0.16f, 1.0f});
     }
-    for (const auto& marker : world_.markers()) {
+    for (const auto& marker : world_.actors.markers()) {
         if (!marker.alive) continue;
         draw_cube(cube_at(marker.position + glm::vec3{0.0f, marker.size * 0.5f, 0.0f},
                           glm::vec3{marker.size, marker.size, marker.size}),

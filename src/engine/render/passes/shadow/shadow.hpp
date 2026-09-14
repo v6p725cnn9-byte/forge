@@ -4,7 +4,7 @@
 
 namespace forge::render {
 
-inline SDL_GPUGraphicsPipeline* make_depth_shadow_pipeline(rhi::Host& host, const Renderer& renderer)
+inline SDL_GPUGraphicsPipeline* make_depth_shadow_pipeline(SDL_GPUDevice* device, const Renderer& renderer)
 {
     return make_shadow_pipeline(host, renderer);
 }

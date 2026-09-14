@@ -10,13 +10,15 @@ extern "C" {
 namespace forge::script {
 namespace {
 
-Registry* world(lua_State* L)
+game::World* world(lua_State* L)
 {
     lua_getfield(L, LUA_REGISTRYINDEX, "forge.world");
-    auto* registry = static_cast<Registry*>(lua_touserdata(L, -1));
+    auto* session = static_cast<game::World*>(lua_touserdata(L, -1));
     lua_pop(L, 1);
-    return registry;
+    return session;
 }
+
+game::Actors& actors(lua_State* L) { return world(L)->actors; }
 
 int fail(lua_State* L, const char* message)
 {
@@ -30,7 +32,7 @@ int spawn_player(lua_State* L)
     const auto x = static_cast<float>(luaL_checknumber(L, 1));
     const auto y = static_cast<float>(luaL_checknumber(L, 2));
     const auto z = static_cast<float>(luaL_checknumber(L, 3));
-    const int id = world(L)->spawn_player({x, y, z});
+    const int id = actors(L).spawn_player({x, y, z});
     if (id < 0) return fail(L, "player slots full");
     lua_pushinteger(L, id);
     return 1;
@@ -42,7 +44,7 @@ int spawn_vehicle(lua_State* L)
     const auto y = static_cast<float>(luaL_checknumber(L, 2));
     const auto z = static_cast<float>(luaL_checknumber(L, 3));
     const auto yaw = static_cast<float>(luaL_optnumber(L, 4, 0.0));
-    const int id = world(L)->spawn_vehicle({x, y, z}, yaw);
+    const int id = actors(L).spawn_vehicle({x, y, z}, yaw);
     if (id < 0) return fail(L, "vehicle slots full");
     lua_pushinteger(L, id);
     return 1;
@@ -57,7 +59,7 @@ int create_marker(lua_State* L)
     const auto r = static_cast<float>(luaL_optnumber(L, 5, 0.2));
     const auto g = static_cast<float>(luaL_optnumber(L, 6, 0.8));
     const auto b = static_cast<float>(luaL_optnumber(L, 7, 1.0));
-    const int id = world(L)->create_marker({x, y, z}, size, {r, g, b, 1.0f});
+    const int id = actors(L).create_marker({x, y, z}, size, {r, g, b, 1.0f});
     if (id < 0) return fail(L, "marker slots full");
     lua_pushinteger(L, id);
     return 1;
@@ -70,7 +72,7 @@ int create_label(lua_State* L)
     const auto y = static_cast<float>(luaL_checknumber(L, 3));
     const auto z = static_cast<float>(luaL_checknumber(L, 4));
     const auto distance = static_cast<float>(luaL_optnumber(L, 5, 25.0));
-    const int id = world(L)->create_label(text, {x, y, z}, distance);
+    const int id = actors(L).create_label(text, {x, y, z}, distance);
     if (id < 0) return fail(L, "label slots full");
     lua_pushinteger(L, id);
     return 1;
@@ -78,7 +80,7 @@ int create_label(lua_State* L)
 
 int set_player_name(lua_State* L)
 {
-    auto* player = world(L)->player(static_cast<int>(luaL_checkinteger(L, 1)));
+    auto* player = actors(L).player(static_cast<int>(luaL_checkinteger(L, 1)));
     if (!player) return fail(L, "invalid player");
     player->name = luaL_checkstring(L, 2);
     lua_pushboolean(L, 1);
@@ -87,7 +89,7 @@ int set_player_name(lua_State* L)
 
 int get_player_position(lua_State* L)
 {
-    const auto* player = world(L)->player(static_cast<int>(luaL_checkinteger(L, 1)));
+    const auto* player = actors(L).player(static_cast<int>(luaL_checkinteger(L, 1)));
     if (!player) return fail(L, "invalid player");
     lua_pushnumber(L, player->position.x);
     lua_pushnumber(L, player->position.y);
@@ -97,7 +99,7 @@ int get_player_position(lua_State* L)
 
 int set_player_position(lua_State* L)
 {
-    auto* player = world(L)->player(static_cast<int>(luaL_checkinteger(L, 1)));
+    auto* player = actors(L).player(static_cast<int>(luaL_checkinteger(L, 1)));
     if (!player) return fail(L, "invalid player");
     player->position = {static_cast<float>(luaL_checknumber(L, 2)), static_cast<float>(luaL_checknumber(L, 3)),
                         static_cast<float>(luaL_checknumber(L, 4))};
@@ -107,19 +109,19 @@ int set_player_position(lua_State* L)
 
 int destroy_vehicle(lua_State* L)
 {
-    lua_pushboolean(L, world(L)->destroy_vehicle(static_cast<int>(luaL_checkinteger(L, 1))));
+    lua_pushboolean(L, actors(L).destroy_vehicle(static_cast<int>(luaL_checkinteger(L, 1))));
     return 1;
 }
 
 int destroy_marker(lua_State* L)
 {
-    lua_pushboolean(L, world(L)->destroy_marker(static_cast<int>(luaL_checkinteger(L, 1))));
+    lua_pushboolean(L, actors(L).destroy_marker(static_cast<int>(luaL_checkinteger(L, 1))));
     return 1;
 }
 
 int destroy_label(lua_State* L)
 {
-    lua_pushboolean(L, world(L)->destroy_label(static_cast<int>(luaL_checkinteger(L, 1))));
+    lua_pushboolean(L, actors(L).destroy_label(static_cast<int>(luaL_checkinteger(L, 1))));
     return 1;
 }
 
@@ -173,9 +175,9 @@ const luaL_Reg natives[] = {
 
 } // namespace
 
-void register_api(lua_State* state, Registry& registry, Camera* camera)
+void register_api(lua_State* state, game::World& session, Camera* camera)
 {
-    lua_pushlightuserdata(state, &registry);
+    lua_pushlightuserdata(state, &session);
     lua_setfield(state, LUA_REGISTRYINDEX, "forge.world");
     lua_pushlightuserdata(state, camera);
     lua_setfield(state, LUA_REGISTRYINDEX, "forge.camera");

@@ -19,9 +19,9 @@ constexpr Color kDown{0.10f, 0.32f, 0.22f, 1.0f};
 
 } // namespace
 
-bool Ui::create(rhi::Host& host)
+bool Ui::create(SDL_GPUDevice* device, SDL_Window* window)
 {
-    destroy(host);
+    destroy(device);
     const auto font_path = forge::assets_directory() / "fonts/DroidSans.ttf";
     if (!font_.bake(font_path, 28.0f)) {
         SDL_Log("UI font bake failed: %s", font_path.string().c_str());
@@ -36,31 +36,31 @@ bool Ui::create(rhi::Host& host)
     tex.height = static_cast<Uint32>(font_.atlas_height());
     tex.layer_count_or_depth = 1;
     tex.num_levels = 1;
-    atlas_ = SDL_CreateGPUTexture(host.device(), &tex);
+    atlas_ = SDL_CreateGPUTexture(device, &tex);
     if (!atlas_) return false;
 
     const auto bytes = static_cast<Uint32>(font_.atlas_width() * font_.atlas_height());
     SDL_GPUTransferBufferCreateInfo tb{};
     tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     tb.size = bytes;
-    auto* upload = SDL_CreateGPUTransferBuffer(host.device(), &tb);
+    auto* upload = SDL_CreateGPUTransferBuffer(device, &tb);
     if (!upload) return false;
-    auto* map = static_cast<std::uint8_t*>(SDL_MapGPUTransferBuffer(host.device(), upload, false));
+    auto* map = static_cast<std::uint8_t*>(SDL_MapGPUTransferBuffer(device, upload, false));
     if (!map) {
-        SDL_ReleaseGPUTransferBuffer(host.device(), upload);
+        SDL_ReleaseGPUTransferBuffer(device, upload);
         return false;
     }
     std::memcpy(map, font_.pixels(), bytes);
-    SDL_UnmapGPUTransferBuffer(host.device(), upload);
+    SDL_UnmapGPUTransferBuffer(device, upload);
 
-    rhi::Command command(host.device());
+    rhi::Command command(device);
     if (!command.handle) {
-        SDL_ReleaseGPUTransferBuffer(host.device(), upload);
+        SDL_ReleaseGPUTransferBuffer(device, upload);
         return false;
     }
     auto* copy = SDL_BeginGPUCopyPass(command.handle);
     if (!copy) {
-        SDL_ReleaseGPUTransferBuffer(host.device(), upload);
+        SDL_ReleaseGPUTransferBuffer(device, upload);
         return false;
     }
     SDL_GPUTextureTransferInfo src{};
@@ -73,8 +73,8 @@ bool Ui::create(rhi::Host& host)
     SDL_UploadToGPUTexture(copy, &src, &dst, false);
     SDL_EndGPUCopyPass(copy);
     const bool submitted = command.submit();
-    SDL_ReleaseGPUTransferBuffer(host.device(), upload);
-    if (!submitted || !SDL_WaitForGPUIdle(host.device())) return false;
+    SDL_ReleaseGPUTransferBuffer(device, upload);
+    if (!submitted || !SDL_WaitForGPUIdle(device)) return false;
 
     SDL_GPUSamplerCreateInfo samp{};
     samp.min_filter = SDL_GPU_FILTER_LINEAR;
@@ -83,18 +83,18 @@ bool Ui::create(rhi::Host& host)
     samp.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     samp.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     samp.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_ = SDL_CreateGPUSampler(host.device(), &samp);
+    sampler_ = SDL_CreateGPUSampler(device, &samp);
 
-    backdrop_.set_format(SDL_GetGPUSwapchainTextureFormat(host.device(), host.window()));
-    if (!backdrop_.create(host.device())) return false;
-    auto* vs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    backdrop_.set_format(SDL_GetGPUSwapchainTextureFormat(device, window));
+    if (!backdrop_.create(device)) return false;
+    auto* vs = rhi::load_shader(device, rhi::shader_directory(),
                                 {"ui.vert", SDL_GPU_SHADERSTAGE_VERTEX, 0});
-    auto* fs = rhi::load_shader(host.device(), rhi::shader_directory(),
+    auto* fs = rhi::load_shader(device, rhi::shader_directory(),
                                 {"ui.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 2});
     if (!vs || !fs) {
-        if (vs) SDL_ReleaseGPUShader(host.device(), vs);
-        if (fs) SDL_ReleaseGPUShader(host.device(), fs);
-        backdrop_.destroy(host.device());
+        if (vs) SDL_ReleaseGPUShader(device, vs);
+        if (fs) SDL_ReleaseGPUShader(device, fs);
+        backdrop_.destroy(device);
         return false;
     }
     SDL_GPUVertexBufferDescription buffer{};
@@ -111,7 +111,7 @@ bool Ui::create(rhi::Host& host)
         {7, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, 96},
     };
     SDL_GPUColorTargetDescription color{};
-    color.format = SDL_GetGPUSwapchainTextureFormat(host.device(), host.window());
+    color.format = SDL_GetGPUSwapchainTextureFormat(device, window);
     color.blend_state.enable_blend = true;
     color.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
     color.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -133,21 +133,21 @@ bool Ui::create(rhi::Host& host)
     info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
     info.target_info.num_color_targets = 1;
     info.target_info.color_target_descriptions = &color;
-    pipeline_ = SDL_CreateGPUGraphicsPipeline(host.device(), &info);
-    SDL_ReleaseGPUShader(host.device(), vs);
-    SDL_ReleaseGPUShader(host.device(), fs);
+    pipeline_ = SDL_CreateGPUGraphicsPipeline(device, &info);
+    SDL_ReleaseGPUShader(device, vs);
+    SDL_ReleaseGPUShader(device, fs);
     return pipeline_ && sampler_ && atlas_ && backdrop_.sampler() && backdrop_.texture();
 }
 
-void Ui::destroy(rhi::Host& host)
+void Ui::destroy(SDL_GPUDevice* device)
 {
-    if (!host.device()) return;
-    backdrop_.destroy(host.device());
-    if (pipeline_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pipeline_);
-    if (vertices_) SDL_ReleaseGPUBuffer(host.device(), vertices_);
-    if (transfer_) SDL_ReleaseGPUTransferBuffer(host.device(), transfer_);
-    if (sampler_) SDL_ReleaseGPUSampler(host.device(), sampler_);
-    if (atlas_) SDL_ReleaseGPUTexture(host.device(), atlas_);
+    if (!device) return;
+    backdrop_.destroy(device);
+    if (pipeline_) SDL_ReleaseGPUGraphicsPipeline(device, pipeline_);
+    if (vertices_) SDL_ReleaseGPUBuffer(device, vertices_);
+    if (transfer_) SDL_ReleaseGPUTransferBuffer(device, transfer_);
+    if (sampler_) SDL_ReleaseGPUSampler(device, sampler_);
+    if (atlas_) SDL_ReleaseGPUTexture(device, atlas_);
     pipeline_ = nullptr;
     vertices_ = nullptr;
     transfer_ = nullptr;
@@ -280,11 +280,11 @@ void Ui::emit_shape(Rect quad_rect, Rect box, const BoxStyle& style, Color fill)
     shape_vertex(x0, y1, box, style, fill);
 }
 
-bool Ui::prepare_backdrop(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain,
+bool Ui::prepare_backdrop(SDL_GPUDevice* device, rhi::Command& command, SDL_GPUTexture* swapchain,
                           std::uint32_t target_w, std::uint32_t target_h)
 {
     if (!needs_backdrop_) return true;
-    return backdrop_.prepare(host.device(), command.handle, swapchain, target_w, target_h);
+    return backdrop_.prepare(device, command.handle, swapchain, target_w, target_h);
 }
 
 void Ui::box(Rect rect, const BoxStyle& style)
@@ -641,7 +641,7 @@ bool Ui::scrollbox(std::uint32_t id, Rect rect, float content_h, float* scroll)
     return changed;
 }
 
-bool Ui::submit(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, bool clear, SDL_FColor clear_color,
+bool Ui::submit(SDL_GPUDevice* device, rhi::Command& command, SDL_GPUTexture* swapchain, bool clear, SDL_FColor clear_color,
                 std::uint32_t target_w, std::uint32_t target_h)
 {
     if (!pipeline_ || verts_.empty()) {
@@ -658,23 +658,23 @@ bool Ui::submit(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchai
     }
     const auto bytes = static_cast<Uint32>(verts_.size() * sizeof(Vertex));
     if (bytes > vertex_capacity_) {
-        if (vertices_) SDL_ReleaseGPUBuffer(host.device(), vertices_);
-        if (transfer_) SDL_ReleaseGPUTransferBuffer(host.device(), transfer_);
+        if (vertices_) SDL_ReleaseGPUBuffer(device, vertices_);
+        if (transfer_) SDL_ReleaseGPUTransferBuffer(device, transfer_);
         vertex_capacity_ = bytes + 4096;
         SDL_GPUBufferCreateInfo vb{};
         vb.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
         vb.size = vertex_capacity_;
-        vertices_ = SDL_CreateGPUBuffer(host.device(), &vb);
+        vertices_ = SDL_CreateGPUBuffer(device, &vb);
         SDL_GPUTransferBufferCreateInfo tb{};
         tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
         tb.size = vertex_capacity_;
-        transfer_ = SDL_CreateGPUTransferBuffer(host.device(), &tb);
+        transfer_ = SDL_CreateGPUTransferBuffer(device, &tb);
         if (!vertices_ || !transfer_) return false;
     }
-    auto* map = static_cast<std::uint8_t*>(SDL_MapGPUTransferBuffer(host.device(), transfer_, true));
+    auto* map = static_cast<std::uint8_t*>(SDL_MapGPUTransferBuffer(device, transfer_, true));
     if (!map) return false;
     std::memcpy(map, verts_.data(), bytes);
-    SDL_UnmapGPUTransferBuffer(host.device(), transfer_);
+    SDL_UnmapGPUTransferBuffer(device, transfer_);
     auto* copy = SDL_BeginGPUCopyPass(command.handle);
     if (!copy) return false;
     const SDL_GPUTransferBufferLocation src{transfer_, 0};

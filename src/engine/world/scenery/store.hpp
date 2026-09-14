@@ -7,6 +7,7 @@
 
 namespace forge::world {
 
+// Scenery SoA (props, city kit). Gameplay actors live in game::World.
 class Store {
 public:
     Entity spawn(const glm::vec3& position, float yaw_degrees, const glm::vec3& scale, std::uint16_t mesh,

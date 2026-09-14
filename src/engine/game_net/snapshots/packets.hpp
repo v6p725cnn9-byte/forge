@@ -21,7 +21,8 @@ constexpr std::size_t kMaxGamePayload = kMaxDatagram;
 constexpr std::size_t kMaxSnapshotSize = kMaxGamePayload;
 constexpr std::size_t kMaxReliableMessageSize = kMaxGamePayload;
 constexpr std::size_t kMaxPacket = kMaxGamePayload;
-constexpr int kMaxSnapshotEntities = 32;
+constexpr int kDefaultSnapshotEntities = 32; // interest default
+constexpr int kMaxSnapshotEntities = 128;    // protocol hard cap, not the default
 constexpr float kDefaultStreamRadius = 55.0f;
 constexpr int kTickHz = 20;
 

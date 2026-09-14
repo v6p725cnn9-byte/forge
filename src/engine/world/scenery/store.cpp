@@ -1,4 +1,4 @@
-#include "engine/world/entities/store.hpp"
+#include "engine/world/scenery/store.hpp"
 
 namespace forge::world {
 

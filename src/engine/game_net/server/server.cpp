@@ -132,15 +132,15 @@ void Server::drop_body(int player_id)
     bodies_[static_cast<std::size_t>(player_id)] = -1;
 }
 
-void Server::attach(game::Actors& world) { world_ = &world; }
-
-void Server::attach_sim(game::Sim& sim) { sim_ = &sim; }
-
 void Server::attach(game::World& world)
 {
-    attach(world.actors);
-    attach_sim(world.sim);
+    world_ = &world.actors;
+    sim_ = &world.sim;
 }
+
+void Server::attach(game::Actors& actors) { world_ = &actors; }
+
+void Server::attach_sim(game::Sim& sim) { sim_ = &sim; }
 
 void Server::set_stream_radius(float meters) { stream_radius_ = std::max(meters, 8.0f); }
 
@@ -409,8 +409,8 @@ void Server::broadcast()
                 if (a_self != b_self) return a_self;
                 return xz_distance(player->position, a.position) < xz_distance(player->position, b.position);
             });
-            if (snapshot.entities.size() > static_cast<std::size_t>(kMaxSnapshotEntities))
-                snapshot.entities.resize(static_cast<std::size_t>(kMaxSnapshotEntities));
+            if (snapshot.entities.size() > static_cast<std::size_t>(kDefaultSnapshotEntities))
+                snapshot.entities.resize(static_cast<std::size_t>(kDefaultSnapshotEntities));
             snapshot.phase = static_cast<std::uint8_t>(sim_->phase());
             if (const auto* pawn = sim_->pawn(peer.player_id)) {
                 snapshot.hp = static_cast<std::uint8_t>(std::clamp(pawn->hp, 0.0f, 100.0f));

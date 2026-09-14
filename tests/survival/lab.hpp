@@ -1,12 +1,11 @@
 #pragma once
 
 #include "engine/app/lab.hpp"
-#include "engine/game/session/session.hpp"
+#include "engine/game/world/world.hpp"
 #include "engine/game_net/client/client.hpp"
 #include "engine/game_net/server/server.hpp"
 #include "engine/render/passes/opaque/pbr_scene.hpp"
 #include "engine/render/renderer/survival_visuals.hpp"
-#include "engine/script/bindings/registry.hpp"
 
 #include <string>
 
@@ -47,8 +46,7 @@ private:
     void follow_camera(Camera& camera) const;
     const net::Ghost* self() const;
 
-    script::Registry world_;
-    game::Sim sim_;
+    game::World world_;
     net::Server server_;
     net::Client client_;
     render::PbrScene cube_;

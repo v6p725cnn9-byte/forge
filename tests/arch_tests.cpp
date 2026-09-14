@@ -10,6 +10,7 @@
 #include "engine/game/systems/save.hpp"
 #include "engine/game/world/world.hpp"
 #include "engine/net/protocol/envelope.hpp"
+#include "engine/rhi/device/handles.hpp"
 #include "engine/physics/character/character.hpp"
 #include "engine/platform/input/input.hpp"
 #include "engine/render/framegraph/framegraph.hpp"
@@ -17,10 +18,11 @@
 #include "engine/ui/layout/layout.hpp"
 #include "engine/world/transform/origin.hpp"
 #include "engine/world/sectors/sectors.hpp"
-#include "engine/world/entities/store.hpp"
+#include "engine/world/scenery/store.hpp"
 
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <glm/glm.hpp>
 #include <iostream>
@@ -58,9 +60,25 @@ int main()
     check(render::pbr_vertex_shader(render::ShaderFeature::Instanced) == std::string("pbr_instanced.vert"),
           "instanced permutation");
 
+    render::FrameGraph bad;
+    bad.add_pass("opaque", {render::FrameGraph::kInvalid}, {render::FrameGraph::kInvalid},
+                 [](rhi::Command&) { return true; });
+    check(!bad.compile(), "pass with missing resource fails compile");
     render::FrameGraph graph;
-    graph.add_pass("opaque", {1}, {1}, [](rhi::Command&) { return true; });
-    check(!graph.compile(), "pass with missing resource fails compile");
+    auto* fake = reinterpret_cast<SDL_GPUTexture*>(static_cast<std::uintptr_t>(1));
+    auto hdr = graph.import("hdr", fake);
+    auto swap = graph.import("swapchain", fake);
+    graph.add_pass("opaque", {hdr}, {hdr}, [](rhi::Command&) { return true; });
+    graph.add_pass("tonemap", {hdr}, {swap}, [](rhi::Command&) { return true; });
+    check(graph.compile(), "imported hdr can feed tonemap");
+    check(graph.first_use(hdr) == 0 && graph.last_use(hdr) == 1, "hdr lifetime spans both passes");
+    check(graph.dead_after(hdr, 2), "hdr is dead after last use");
+    const auto bloom = graph.create_transient({"bloom", 64, 64});
+    check(graph.transient(bloom), "bloom is a transient");
+    check(net::kDefaultSnapshotEntities == 32 && net::kMaxSnapshotEntities == 128, "snapshot caps split");
+    check(net::lane_of(net::Reliability::Reliable) == net::Lane::ReliableUnordered, "reliable lane");
+    rhi::TextureHandle dead{};
+    check(!dead, "zero generation handle is empty");
 
     core::JobPool pool(2);
     std::atomic<int> hits{0};

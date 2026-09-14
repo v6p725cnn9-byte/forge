@@ -2,8 +2,8 @@
 
 namespace forge::core {
 
-// Simulation and replication are fixed. Rendering and animation follow the
-// display; they must never step the authoritative world.
+// Sim tick and net send tick are independent knobs that currently share a
+// value. Rendering and animation follow the display and never step the world.
 constexpr int kSimHz = 20;
 constexpr int kNetHz = 20;
 constexpr float kSimDt = 1.0f / static_cast<float>(kSimHz);

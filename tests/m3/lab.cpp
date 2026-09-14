@@ -65,9 +65,9 @@ bool ShadowWalkLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& re
         SDL_Log("Scene load failed: %s", error.c_str());
         return false;
     }
-    pbr_cull_ = render::make_pbr_pipeline(host, renderer, false);
-    pbr_double_ = render::make_pbr_pipeline(host, renderer, true);
-    shadow_pipeline_ = render::make_shadow_pipeline(host, renderer);
+    pbr_cull_ = render::make_pbr_pipeline(host.device(), renderer, false);
+    pbr_double_ = render::make_pbr_pipeline(host.device(), renderer, true);
+    shadow_pipeline_ = render::make_shadow_pipeline(host.device(), renderer);
     if (!pbr_cull_ || !pbr_double_ || !shadow_pipeline_ || !create_shadow_map(host, renderer)) return false;
     if (!physics_.init()) return false;
 
@@ -167,7 +167,7 @@ void ShadowWalkLab::update(float dt, Camera& camera, const app::LabInput& input)
 rhi::FrameResult ShadowWalkLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     compute_cascades(camera, aspect);
 

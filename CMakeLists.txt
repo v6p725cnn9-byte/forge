@@ -128,15 +128,23 @@ target_include_directories(forge_imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui
 target_link_libraries(forge_imgui PUBLIC SDL3::SDL3)
 
 add_library(forge_world STATIC
-    src/engine/world/entities/store.cpp
+    src/engine/world/scenery/store.cpp
     src/engine/world/sectors/sectors.cpp
     src/engine/world/spatial/frustum.cpp
     src/engine/world/spatial/cull.cpp
-    src/engine/world/entities/city.cpp
+    src/engine/world/scenery/city.cpp
 )
 target_include_directories(forge_world PUBLIC src)
 target_link_libraries(forge_world PUBLIC glm::glm)
 
+# Dependency DAG (do not invert):
+#   forge_net  (no game types)
+#   forge_game -> forge_net
+#   forge_script -> forge_game
+#   forge_game_net -> forge_net + forge_game + forge_script + forge_physics
+#   forge_anim -> forge_assets
+#   forge_engine -> camera/assets/anim/world/rhi  (not game_net)
+# Labs/game binaries link forge_engine + forge_game_net as needed.
 add_library(forge_engine STATIC
     src/engine/app/run.cpp
     src/engine/render/passes/post/composite.cpp

@@ -1,17 +1,18 @@
 #pragma once
 
 #include "engine/game_net/snapshots/packets.hpp"
-#include "engine/render/passes/opaque/pbr_scene.hpp"
 #include "engine/render/passes/opaque/pbr_pass.hpp"
+#include "engine/render/passes/opaque/pbr_scene.hpp"
 
+#include <SDL3/SDL.h>
 #include <array>
 
 namespace forge::render {
 
 class SurvivalVisuals {
 public:
-    bool create(rhi::Host& host, Renderer& renderer);
-    void destroy(rhi::Host& host);
+    bool create(SDL_GPUDevice* device, Renderer& renderer);
+    void destroy(SDL_GPUDevice* device);
     void update(const net::Snapshot& snapshot, std::uint8_t local_player, float dt, bool interact);
     void draw(SDL_GPUCommandBuffer* command, SDL_GPURenderPass* pass, const net::Snapshot& snapshot,
               const glm::mat4& view_projection, const DebugState& debug, const glm::vec3& camera_position,

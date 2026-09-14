@@ -37,8 +37,8 @@ bool SkinVehicleLab::setup(rhi::Host& host, [[maybe_unused]] render::Renderer& r
         SDL_Log("Cube ingest failed: %s", error.c_str());
         return false;
     }
-    pbr_ = render::make_pbr_pipeline(host, renderer, false);
-    skinned_ = render::make_pbr_skinned_pipeline(host, renderer, true);
+    pbr_ = render::make_pbr_pipeline(host.device(), renderer, false);
+    skinned_ = render::make_pbr_skinned_pipeline(host.device(), renderer, true);
     if (!pbr_ || !skinned_) return false;
     if (!physics_.init()) return false;
 
@@ -154,7 +154,7 @@ void SkinVehicleLab::update(float dt, Camera& camera, const app::LabInput& input
 rhi::FrameResult SkinVehicleLab::draw(rhi::Host& host, [[maybe_unused]] render::Renderer& renderer, rhi::Command& command, SDL_GPUTexture* swapchain,
                                      Uint32 width, Uint32 height, Camera& camera, bool)
 {
-    if (!renderer.ensure(host, width, height, frame_config())) return rhi::FrameResult::failed;
+    if (!renderer.ensure(host.gpu(), host.window(), width, height, frame_config())) return rhi::FrameResult::failed;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
     render::CameraUniforms camera_ubo{};
     camera_ubo.view_projection = camera.projection(aspect) * camera.view();

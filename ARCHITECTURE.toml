@@ -1,0 +1,436 @@
+# Forge — architecture snapshot for review
+# C++20, SDL3 GPU, Jolt, no Unity/Unreal/Godot/Bevy
+# Visual target = technical baseline inspired by GTA IV / Sleeping Dogs
+# (PBR+CSM+HDR+IBL+ACES). Not a claim that the picture matches those games.
+
+schema = "forge-arch/v3"
+project = "forge"
+version = "0.9.0"
+active_milestone = "A1"
+
+[contract]
+source_of_truth = "README.md TOMLMD"
+include_root = "src/"
+rhi = "SDL3 GPU (Metal now; DX12/Vulkan later via same API + shadercross)"
+physics_collision = "Jolt CharacterVirtual + boxes"
+locomotion = "standalone C++20 ALS-Refactored concepts, MIT, no Unreal"
+assets = "glTF + KTX2/Basis, Mixamo X Bot (own license, not ALS MIT)"
+scripts = "Lua 5.4 bindings only; Lua does not own world state"
+world_model = "SoA, no GameObject tree"
+imgui = "dev overlay only; never shipping UI"
+
+[ownership]
+root = "game::World — the only gameplay aggregate"
+rule = "World world; world.actors; world.sim; future weather/AI/quests/events/loot/machines/doors hang on World"
+lua = "calls spawn/set on world.actors"
+network_reads = "world.actors + world.sim"
+scenery = "world/scenery SoA + sectors — props only, never players"
+rhi = "how we draw: Device/command/buffer/texture/sampler/pipeline/shader/swapchain"
+render = "what we draw: renderer + framegraph + passes"
+production_gpu = "platform::Window + rhi::Device. render/ui/frontend do not include Host. Host remains labs + game main bootstrap."
+transport = "engine/net — UDP, bytes, seq/ACK, FNT1; no Snapshot/Sim/Jolt"
+replication = "engine/game_net — packets, server, client, interest, prediction"
+
+[ticks]
+sim_hz = 20
+net_hz = 20
+note = "sim and net are independent knobs that currently share 20. They are not required to stay equal."
+render = "variable, display"
+animation = "variable, display"
+interpolation_delay_s = 0.10
+prediction = "kinematic ALS gait speeds, replay unacked input, reconcile on snapshot ack"
+
+[net]
+magic_game = "0x37475246"
+magic_transport = "0x31544E46" # FNT1
+version = 2
+default_port = 27015
+lanes = [
+  "0 unreliable",
+  "1 reliable unordered (implemented)",
+  "2 reliable ordered (reserved)",
+  "3 snapshot (reserved)",
+]
+reliable = "lane 1: unordered resend until ACK; do not silently promote to ordered"
+unreliable = "lane 0: fire-and-forget, dup drop by seq"
+packets = ["Hello", "Welcome", "Input", "Snapshot", "Ping", "Pong", "Disconnect", "Event", "ReliableEvent", "Ack", "Resync", "Auth"]
+ethernet_mtu = 1500
+ipv4_udp_overhead = 28
+max_datagram = 1400
+transport_header = 17
+game_header = 8
+default_snapshot_entities = 32
+max_snapshot_entities = 128
+stream_radius_m = 55.0
+authority = "server; Action is a request, server validates recipe/inventory/station/timing"
+
+[handles]
+texture = "rhi::TextureHandle { uint32 index; uint32 generation; }"
+framegraph_resource = "render::ResourceHandle { uint32 index; uint32 generation; }"
+stale = "native() returns null if generation mismatches"
+
+[framegraph]
+now = "bind Resources; create_transient allocates GPU; Read/Write; first/last; dead_after. Renderer does not allocate extra transients."
+next = [
+  "resource lifetime-driven reuse / aliasing",
+  "pass dependencies as a DAG",
+  "barrier generation",
+]
+
+[frame]
+flow = "labs: Host. production: Window + Device → Renderer"
+opaque = "draw into Renderer HDR+depth"
+post = "FrameGraph: bloom READ hdr WRITE bloom; tonemap READ hdr+bloom WRITE swapchain"
+ui = "shipping ui:: widgets; backdrop blur is a render pass"
+
+[streaming]
+states = ["Empty", "Prefetch", "Loading", "CpuReady", "GpuUploading", "Resident", "Unloading"]
+sync_today = "in-radius jumps to Resident; prefetch ring is Prefetch"
+next = "Sector → StreamingManager → IO job → decode → CPU asset → GPU upload queue → Resident"
+
+[[modules]]
+path = "src/engine/core/memory"
+does = "bump Arena for scratch"
+
+[[modules]]
+path = "src/engine/core/jobs"
+does = "thread pool"
+
+[[modules]]
+path = "src/engine/core/log"
+does = "channels CORE/RHI/RENDER/ASSET/ANIM/PHYS/GAME/NET/SCRIPT/AUDIO; TRACE..ERROR"
+
+[[modules]]
+path = "src/engine/core/profiler"
+does = "CPU scopes"
+
+[[modules]]
+path = "src/engine/core/time"
+does = "fixed sim/net Hz"
+
+[[modules]]
+path = "src/engine/core/camera"
+does = "fly / 1st / 3rd person"
+
+[[modules]]
+path = "src/engine/core/paths"
+does = "find shaders/ and assets/ next to the binary"
+
+[[modules]]
+path = "src/engine/platform/window"
+does = "Window is the API; Host composes Window+Device for labs only"
+
+[[modules]]
+path = "src/engine/platform/input"
+does = "WASD/jump/interact; compose_walk"
+
+[[modules]]
+path = "src/engine/rhi/device"
+does = "SDL_GPUDevice, resource handles, GPU texture lifetime, upload"
+
+[[modules]]
+path = "src/engine/rhi/command"
+does = "RAII command buffer: submit or cancel"
+
+[[modules]]
+path = "src/engine/rhi/buffer"
+does = "GPU buffers"
+
+[[modules]]
+path = "src/engine/rhi/texture"
+does = "GPU upload only; no KTX decode"
+
+[[modules]]
+path = "src/engine/rhi/sampler"
+does = "sampler create"
+
+[[modules]]
+path = "src/engine/rhi/pipeline"
+does = "pipeline destroy helper"
+
+[[modules]]
+path = "src/engine/rhi/shader"
+does = "load cooked MSL/SPIR-V/DXIL"
+
+[[modules]]
+path = "src/engine/rhi/swapchain"
+does = "present mode"
+
+[[modules]]
+path = "src/engine/assets/manager"
+does = "glTF cache + AssetState Unloaded/Loading/CpuReady/GpuReady/Failed"
+
+[[modules]]
+path = "src/engine/assets/gltf"
+does = "cgltf scene, cube, terrain"
+
+[[modules]]
+path = "src/engine/assets/ktx2"
+does = "KTX2/Basis decode+transcode to CPU bytes"
+
+[[modules]]
+path = "src/engine/assets/cache"
+does = "alias of catalog()"
+
+[[modules]]
+path = "src/engine/assets/streaming"
+does = "map sector residency to CPU/GPU keep"
+
+[[modules]]
+path = "src/engine/render/renderer"
+does = "owns HDR/depth/bloom targets, IBL, survival visuals, post()"
+
+[[modules]]
+path = "src/engine/render/framegraph"
+does = "ResourceHandle, Read/Write, first/last lifetime, transients; aliasing next"
+
+[[modules]]
+path = "src/engine/render/passes/shadow"
+does = "CSM pipeline slot"
+
+[[modules]]
+path = "src/engine/render/passes/depth"
+does = "scene depth target"
+
+[[modules]]
+path = "src/engine/render/passes/opaque"
+does = "forward PBR / skinned / instanced"
+
+[[modules]]
+path = "src/engine/render/passes/transparent"
+does = "alpha pass slot (fire currently alpha-mask in opaque)"
+
+[[modules]]
+path = "src/engine/render/passes/post"
+does = "bloom, ACES tonemap, swapchain composite"
+
+[[modules]]
+path = "src/engine/render/passes/ui"
+does = "GPU backdrop blur for shipping UI"
+
+[[modules]]
+path = "src/engine/anim/skeleton"
+does = "globals + GPU palette"
+
+[[modules]]
+path = "src/engine/anim/clip"
+does = "find/sample clips"
+
+[[modules]]
+path = "src/engine/anim/graph"
+does = "idle/walk/run select by speed"
+
+[[modules]]
+path = "src/engine/anim/pose"
+does = "Palette"
+
+[[modules]]
+path = "src/engine/anim/ik"
+does = "collapse_joint for headless 1st person"
+
+[[modules]]
+path = "src/engine/physics/world"
+does = "Jolt world, boxes, vehicle (M5)"
+
+[[modules]]
+path = "src/engine/physics/character"
+does = "CharacterVirtual API surface"
+
+[[modules]]
+path = "src/engine/physics/locomotion"
+does = "ALS gait/CMC/rotation/mantle over Jolt"
+
+[[modules]]
+path = "src/engine/world/scenery"
+does = "scenery SoA store + city props — not gameplay entities"
+
+[[modules]]
+path = "src/engine/world/transform"
+does = "AABB, sector keys, floating origin"
+
+[[modules]]
+path = "src/engine/world/spatial"
+does = "frustum + cull"
+
+[[modules]]
+path = "src/engine/world/sectors"
+does = "stream radius + residency Empty/Prefetch/Loading/CpuReady/GpuUploading/Resident/Unloading"
+
+[[modules]]
+path = "src/engine/game/world"
+does = "aggregate root: World.actors + World.sim"
+
+[[modules]]
+path = "src/engine/game/actors"
+does = "owned by World: players/vehicles/markers/labels"
+
+[[modules]]
+path = "src/engine/game/inventory"
+does = "items, stacks, 45 kg"
+
+[[modules]]
+path = "src/engine/game/crafting"
+does = "recipe table"
+
+[[modules]]
+path = "src/engine/game/interaction"
+does = "harvest/hit entry"
+
+[[modules]]
+path = "src/engine/game/session"
+does = "Sim implementation / gameplay systems. World owns the Sim instance."
+
+[[modules]]
+path = "src/engine/game/systems"
+does = "save schema v1"
+
+[[modules]]
+path = "src/engine/net/transport"
+does = "UDP socket, ByteWriter/Reader, Channel; lanes 0/1 live, 2/3 reserved"
+
+[[modules]]
+path = "src/engine/net/protocol"
+does = "FNT1 envelope constants"
+
+[[modules]]
+path = "src/engine/net/connection"
+does = "seq, ACK bitfield, RTT, loss"
+
+[[modules]]
+path = "src/engine/game_net/server"
+does = "20 Hz Sim + Jolt, snapshots, ping/pong"
+
+[[modules]]
+path = "src/engine/game_net/client"
+does = "hello/input, view() = interpolation + prediction"
+
+[[modules]]
+path = "src/engine/game_net/snapshots"
+does = "pack/unpack + snapshot buffer"
+
+[[modules]]
+path = "src/engine/game_net/prediction"
+does = "client input history + kinematic integrate"
+
+[[modules]]
+path = "src/engine/game_net/reconciliation"
+does = "correct() → Prediction::reconcile"
+
+[[modules]]
+path = "src/engine/game_net/interest"
+does = "55 m stream, self first, default 32 / protocol max 128"
+
+[[modules]]
+path = "src/engine/script/vm"
+does = "Lua 5.4"
+
+[[modules]]
+path = "src/engine/script/bindings"
+does = "Lua ops on game::World; bindings touch World.actors internally"
+
+[[modules]]
+path = "src/engine/audio/device"
+does = "SDL audio subsystem claim"
+
+[[modules]]
+path = "src/engine/audio/mixer"
+does = "master volume slot; no voice graph yet"
+
+[[modules]]
+path = "src/engine/audio/spatial"
+does = "distance attenuation helper"
+
+[[modules]]
+path = "src/engine/ui/widgets"
+does = "shipping SDF UI"
+
+[[modules]]
+path = "src/engine/ui/layout"
+does = "Rect pad"
+
+[[modules]]
+path = "src/engine/ui/text"
+does = "MSDF atlas"
+
+[[modules]]
+path = "src/engine/frontend/menu"
+does = "main menu, 3D vista, i18n"
+
+[[modules]]
+path = "src/engine/frontend/settings"
+does = "settings.cfg persist"
+
+[[modules]]
+path = "src/engine/frontend/inventory"
+does = "Tab inventory/craft UI"
+
+[[modules]]
+path = "src/engine/app"
+does = "process lifecycle only: Lab + run_lab"
+
+[[modules]]
+path = "src/engine/dev"
+does = "ImGui overlay, FORGE_DEV_UI=OFF in release"
+
+[cmake]
+libs = [
+  "forge_net",
+  "forge_game",
+  "forge_script",
+  "forge_game_net",
+  "forge_physics",
+  "forge_assets",
+  "forge_anim",
+  "forge_world",
+  "forge_engine",
+]
+note = "DAG: net; game->net; script->game; game_net->net+game+script+physics; engine->camera/assets/anim/world (not game_net)."
+
+[binaries]
+forge = "survival session (menu → host/join)"
+labs = ["forge_m1", "forge_m2", "forge_m3", "forge_m4", "forge_m5", "forge_m6", "forge_m7"]
+
+[honest]
+done = [
+  "game::World is the only gameplay aggregate root (world.actors / world.sim)",
+  "world/scenery is props SoA, not gameplay entities",
+  "RHI no longer owns HDR/bloom/ACES",
+  "Renderer production API is Device+Window; Host is labs-only",
+  "FrameGraph: ResourceHandle, Read/Write, first/last lifetime, transients",
+  "GPU handles are index+generation",
+  "Lua is API over world.actors",
+  "client prediction + interpolation + reconcile",
+  "Packet lanes 0/1 live, 2/3 reserved; default snapshot 32 / protocol max 128",
+  "sector states include Loading/CpuReady/GpuUploading",
+  "AssetState on the glTF catalog",
+]
+thin = [
+  "transparent pass is a slot; particles still alpha-mask in opaque",
+  "anim graph is gait select, not a full blend tree",
+  "IK is collapse_joint only",
+  "audio mixer/spatial have no voices/banks yet",
+  "save schema v1 encodes pawns, not full world migration",
+  "streaming enum is ready; IO-thread loader is not",
+  "FrameGraph records lifetime but does not yet alloc/alias GPU transients",
+  "shader permutations map to cooked files, not #define variants",
+]
+next_not_in_this_pass = [
+  "prove the stack under load: Window→RHI→FrameGraph→PBR→Jolt→World→net→prediction",
+  "async sector IO + GPU residency eviction",
+  "ordered per-channel reliable (lane 2)",
+  "full client CharacterVirtual prediction",
+  "AssetHandle<T> / AssetLoader / GPUReady",
+  "SSAO/TAA/fog/material authoring for the visual target",
+  "Windows DX12 preset (m0-windows)",
+]
+known_risks = [
+  "kinematic client prediction will desync against Jolt CharacterVirtual on contacts",
+  "32 default snapshot entities is an interest default, not a protocol ceiling (128)",
+  "game main (shell) still bootstraps via Host; labs too",
+]
+architectural_debt = [
+  "Host still used as process bootstrap in labs and survival main",
+  "Client prediction not CharacterVirtual",
+  "Asset streaming lacks async IO",
+  "FrameGraph lacks transient aliasing and barrier generation",
+]

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "engine/world/entities/store.hpp"
+#include "engine/world/scenery/store.hpp"
 
 #include <cstdint>
 

@@ -12,7 +12,7 @@ namespace forge::rhi {
 
 enum class FrameResult { presented, skipped, failed };
 
-// Composes platform::Window + rhi::Device. Scene targets live in render::Renderer.
+// Labs bootstrap only. Production code talks to platform::Window and rhi::Device.
 class Host {
 public:
     Host() = default;
