@@ -48,6 +48,7 @@ bool SurvivalLab::setup(rhi::Host& host, Camera& camera)
     }
     pbr_ = render::make_pbr_pipeline(host, false);
     if (!pbr_) return false;
+    if (!visuals_.create(host)) return false;
 
     unsigned port = env_port();
     net::Address connect{};
@@ -111,7 +112,7 @@ bool SurvivalLab::setup(rhi::Host& host, Camera& camera)
     }
 
     debug_.lab = "survival";
-    debug_.model = "session";
+    debug_.model = "Astronaut / Kenney Nature";
     debug_.survival = true;
     debug_.stream_radius = 70.0f;
     debug_.net_role = hosting_ ? "host" : "client";
@@ -126,6 +127,7 @@ bool SurvivalLab::setup(rhi::Host& host, Camera& camera)
     debug_.home_yaw = camera.yaw;
     debug_.home_pitch = camera.pitch;
     sync_debug();
+    visuals_.update(client_.snapshot(), client_.player_id(), 0, false);
     SDL_Log("Survival %s player %u  %s", debug_.net_role, client_.player_id(), debug_.join_hint);
     return true;
 }
@@ -154,7 +156,8 @@ void SurvivalLab::sync_debug()
         debug_.world_label_text[i] = text;
     };
     for (const auto& ghost : snap.entities) {
-        if (ghost.kind == net::Kind::Player) push_label(ghost.position + glm::vec3{0, 1.5f, 0}, ghost.name.c_str());
+        if (ghost.kind == net::Kind::Player)
+            push_label(visuals_.player_position(ghost.id, ghost.position) + glm::vec3{0, 1.15f, 0}, ghost.name.c_str());
         if (ghost.kind == net::Kind::Extract) push_label(ghost.position + glm::vec3{0, 3.2f, 0}, "EXTRACT");
         if (ghost.kind == net::Kind::Campfire) push_label(ghost.position + glm::vec3{0, 1.2f, 0}, "fire");
     }
@@ -168,8 +171,9 @@ void SurvivalLab::follow_camera(Camera& camera) const
     glm::vec3 flat{camera.forward().x, 0.0f, camera.forward().z};
     if (glm::length(flat) < 1e-4f) flat = {0.0f, 0.0f, 1.0f};
     flat = glm::normalize(flat);
-    camera.position = player->position - flat * 7.0f + glm::vec3{0.0f, 2.6f, 0.0f};
-    camera.look_at(player->position + glm::vec3{0.0f, 0.8f, 0.0f});
+    const auto position = visuals_.player_position(player->id, player->position);
+    camera.position = position - flat * 7.0f + glm::vec3{0.0f, 2.6f, 0.0f};
+    camera.look_at(position + glm::vec3{0.0f, 0.8f, 0.0f});
 }
 
 void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
@@ -186,6 +190,7 @@ void SurvivalLab::update(float dt, Camera& camera, const app::LabInput& input)
     client_.send_input(walk.x, walk.z, yaw_, input.boost, input.interact, input.place);
     if (hosting_) server_.update(dt);
     client_.poll();
+    visuals_.update(client_.snapshot(), client_.player_id(), dt, input.interact || input.place);
     sync_debug();
     follow_camera(camera);
 }
@@ -223,23 +228,14 @@ rhi::FrameResult SurvivalLab::draw(rhi::Host& host, rhi::Command& command, SDL_G
     draw_cube(cube_at({0.0f, -0.5f, 40.0f}, {180.0f, 1.0f, 200.0f}), {0.22f, 0.32f, 0.18f, 1.0f});
 
     for (const auto& ghost : client_.snapshot().entities) {
-        if (ghost.kind == net::Kind::Player) {
-            const glm::vec4 tint = ghost.id == client_.player_id() ? glm::vec4{0.95f, 0.48f, 0.18f, 1.0f}
-                                                                   : glm::vec4{0.35f, 0.72f, 0.40f, 1.0f};
-            draw_cube(cube_at(ghost.position + glm::vec3{0.0f, 0.15f, 0.0f}, {0.55f, 1.7f, 0.55f}, ghost.yaw), tint);
-        } else if (ghost.kind == net::Kind::Tree) {
-            draw_cube(cube_at(ghost.position + glm::vec3{0, 1.1f, 0}, {0.45f, 2.2f, 0.45f}), {0.32f, 0.18f, 0.08f, 1});
-            draw_cube(cube_at(ghost.position + glm::vec3{0, 2.6f, 0}, {2.2f, 1.8f, 2.2f}), {0.12f, 0.32f, 0.12f, 1});
-        } else if (ghost.kind == net::Kind::Rock) {
-            draw_cube(cube_at(ghost.position + glm::vec3{0, 0.35f, 0}, {1.3f, 0.7f, 1.1f}), {0.38f, 0.36f, 0.34f, 1});
-        } else if (ghost.kind == net::Kind::Campfire) {
-            draw_cube(cube_at(ghost.position + glm::vec3{0, 0.25f, 0}, {0.8f, 0.5f, 0.8f}), {0.95f, 0.35f, 0.08f, 1});
-        } else if (ghost.kind == net::Kind::Extract) {
+        if (ghost.kind == net::Kind::Extract) {
             draw_cube(cube_at(ghost.position + glm::vec3{0, 1.6f, 0}, {1.2f, 3.2f, 1.2f}), {0.25f, 0.75f, 0.95f, 1});
         }
     }
+    visuals_.draw(command.handle, pass, client_.snapshot(), camera_ubo.view_projection, debug_, camera.position);
     SDL_EndGPURenderPass(pass);
-    if (!render::apply_tonemap(host, command, swapchain, night ? 0.7f : debug_.exposure, 0.0f)) return rhi::FrameResult::failed;
+    if (!render::apply_bloom(host, command, 1.1f)) return rhi::FrameResult::failed;
+    if (!render::apply_tonemap(host, command, swapchain, night ? 0.7f : debug_.exposure, 0.09f)) return rhi::FrameResult::failed;
     return rhi::FrameResult::presented;
 }
 
@@ -247,6 +243,7 @@ void SurvivalLab::teardown(rhi::Host& host)
 {
     client_.close();
     if (hosting_) server_.close();
+    visuals_.destroy(host);
     cube_.destroy(host.device());
     if (pbr_) SDL_ReleaseGPUGraphicsPipeline(host.device(), pbr_);
     pbr_ = nullptr;

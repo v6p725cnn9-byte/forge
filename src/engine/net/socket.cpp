@@ -24,6 +24,7 @@ namespace {
 
 #ifdef _WIN32
 using Handle = SOCKET;
+using socklen_t = int;
 constexpr Handle kInvalid = INVALID_SOCKET;
 void startup()
 {

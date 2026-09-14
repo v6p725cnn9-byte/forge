@@ -11,7 +11,7 @@ struct type_Camera
 
 struct type_Joints
 {
-    float4x4 joints[48];
+    float4x4 joints[64];
 };
 
 struct main0_out

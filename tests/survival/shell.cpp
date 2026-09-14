@@ -44,7 +44,7 @@ void begin_ui(ui::Ui& ui, SDL_Window* window, bool interactive, bool pressed, bo
              interactive && (buttons & SDL_BUTTON_LMASK) != 0, interactive && pressed, interactive && released);
 }
 
-const std::vector<const char*> kShaders{"pbr.vert", "pbr.frag", "tonemap.vert", "tonemap.frag", "bloom.frag", "ui.vert",
+const std::vector<const char*> kShaders{"pbr.vert", "pbr_skinned.vert", "pbr.frag", "tonemap.vert", "tonemap.frag", "bloom.frag", "ui.vert",
                                         "ui.frag"};
 
 } // namespace

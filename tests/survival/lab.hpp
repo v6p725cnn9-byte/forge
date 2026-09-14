@@ -5,6 +5,7 @@
 #include "engine/net/client.hpp"
 #include "engine/net/server.hpp"
 #include "engine/render/pbr_scene.hpp"
+#include "engine/render/survival_visuals.hpp"
 #include "engine/script/registry.hpp"
 
 #include <string>
@@ -28,15 +29,15 @@ public:
     }
     std::vector<const char*> shaders() const override
     {
-        return {"pbr.vert", "pbr.frag", "tonemap.vert", "tonemap.frag", "bloom.frag"};
+        return {"pbr.vert", "pbr_skinned.vert", "pbr.frag", "tonemap.vert", "tonemap.frag", "bloom.frag"};
     }
-    rhi::HostConfig host_config() const override { return {.hdr = true, .bloom = false}; }
+    rhi::HostConfig host_config() const override { return {.hdr = true, .bloom = true}; }
     bool setup(rhi::Host& host, Camera& camera) override;
     void update(float dt, Camera& camera, const app::LabInput& input) override;
     rhi::FrameResult draw(rhi::Host& host, rhi::Command& command, SDL_GPUTexture* swapchain, Uint32 width,
                           Uint32 height, Camera& camera, bool captured) override;
     void teardown(rhi::Host& host) override;
-    std::uint32_t triangles() const override { return cube_.triangle_count * 40; }
+    std::uint32_t triangles() const override { return visuals_.triangles() + cube_.triangle_count * 2; }
 
 private:
     void sync_debug();
@@ -48,6 +49,7 @@ private:
     net::Server server_;
     net::Client client_;
     render::PbrScene cube_;
+    render::SurvivalVisuals visuals_;
     SDL_GPUGraphicsPipeline* pbr_ = nullptr;
     bool hosting_ = true;
     bool configured_ = false;

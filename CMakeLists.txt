@@ -144,6 +144,7 @@ add_library(forge_engine STATIC
     src/engine/render/ibl.cpp
     src/engine/render/pbr_pass.cpp
     src/engine/render/pbr_scene.cpp
+    src/engine/render/survival_visuals.cpp
 )
 target_include_directories(forge_engine PUBLIC src)
 target_link_libraries(forge_engine PUBLIC SDL3::SDL3 forge_camera forge_assets forge_asset_deps forge_world ktx_read forge_imgui)
@@ -210,6 +211,18 @@ add_custom_target(forge_shaders ALL
 )
 
 add_custom_target(forge_stage_runtime
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets/models/Astronaut
+        ${CMAKE_BINARY_DIR}/assets/models/Astronaut
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets/models/Nature
+        ${CMAKE_BINARY_DIR}/assets/models/Nature
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets/models/Campfire
+        ${CMAKE_BINARY_DIR}/assets/models/Campfire
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets/effects
+        ${CMAKE_BINARY_DIR}/assets/effects
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/shaders/cooked
         ${CMAKE_BINARY_DIR}/shaders
